@@ -22,7 +22,7 @@ driver = webdriver.Firefox(service=service, options=options)
 # Plik CSV, do którego zapiszemy dane
 output_file = "komputronik_telefony.csv"
 # Definiujemy pola CSV
-fieldnames = ["title", "date", "product_link", "rating", "num_of_opinions", "tech_details"] #Fajnie by było znać datę kiedy jaka cena występowała
+fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"] #Fajnie by było znać datę kiedy jaka cena występowała
 today_date = datetime.today().strftime("%d-%m-%Y")
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
@@ -71,12 +71,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 price_element = product.find_element(By.XPATH,
                                                      './/div[@data-name="listingPrice"]//div[@data-price-type="final"]')
                 price_text = price_element.text.strip()
-                try:
-                    price_digits = int(re.sub(r"\D", "", price_text))  # Usunięcie znaków innych niż cyfry
-                    price = int(price_digits) if price_digits else 0
-                except ValueError as e:
-                    print(f"Błąd przy przetwarzaniu produktu: {e}")
-                    price = 0 
+
 
 
                 #Moim zdaniem niepotrzebne jest to pobieranie url'a obrazka
@@ -132,6 +127,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 writer.writerow({
                     "title": title,
                     "date": today_date,
+                    "price": price_text,
                     "product_link": product_link,
                     #"image_url": image_url,
                     "rating": rating,
