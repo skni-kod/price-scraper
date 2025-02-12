@@ -1,7 +1,8 @@
 # Biblioteki
+import re
 import csv
 import json
-import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
@@ -9,15 +10,20 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # Konfiguracja Firefoksa i Geckodrivera
-service = Service("/usr/local/bin/geckodriver")
+# Dla osób z windowsem https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-win32.zip
+
+firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
 options.add_argument("--headless")
+options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
 # Plik CSV, do którego zapiszemy dane
 output_file = "komputronik_telefony.csv"
 # Definiujemy pola CSV
-fieldnames = ["title", "product_link", "price", "image_url", "reviews", "tech_details"]
+fieldnames = ["title", "date", "product_link", "rating", "num_of_opinions", "tech_details"] #Fajnie by było znać datę kiedy jaka cena występowała
+today_date = datetime.today().strftime("%d-%m-%Y")
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -47,12 +53,14 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
         products = driver.find_elements(By.XPATH,
                                         '//div[@data-name="listingTile"]')
+
         if not products:
             print("Brak produktów na stronie, kończę scraping.")
             break
 
         # Iteracja po produktach na stronie
         for product in products:
+
             try:
                 # Pobranie tytułu oraz linku produktu
                 link_element = product.find_element(By.XPATH, './/a[@title]')
@@ -62,11 +70,19 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 # Pobranie ceny produktu
                 price_element = product.find_element(By.XPATH,
                                                      './/div[@data-name="listingPrice"]//div[@data-price-type="final"]')
-                price = price_element.text.strip()
+                price_text = price_element.text.strip()
+                try:
+                    price_digits = int(re.sub(r"\D", "", price_text))  # Usunięcie znaków innych niż cyfry
+                    price = int(price_digits) if price_digits else 0
+                except ValueError as e:
+                    print(f"Błąd przy przetwarzaniu produktu: {e}")
+                    price = 0 
 
+
+                #Moim zdaniem niepotrzebne jest to pobieranie url'a obrazka
                 # Pobranie URL obrazka produktu
-                img_element = product.find_element(By.XPATH, './/img')
-                image_url = img_element.get_attribute("src")
+                # img_element = product.find_element(By.XPATH, './/img')
+                # image_url = img_element.get_attribute("src") 
 
                 # Pobieranie danych technicznych
                 tech_details = {}
@@ -76,10 +92,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     code_elements = product.find_elements(By.XPATH,
                                                           './/div[contains(@class, "mt-6") and contains(@class, "hidden")]/p')
                     for p in code_elements:
-                        text = p.text.strip()
-                        if text and ':' in text:
-                            key, value = text.split(":", 1)
-                            tech_details[key.strip()] = value.strip()
+                        #if text and ':' in text: Komputronik zawsze ma podany jakiś kod producenta lub systemowy, szkoda czasu żeby ciągle to sprawdzać
+                            # key, value = text.split(":", 1)
+                            # tech_details[key.strip()] = value.strip()
+                        key, value = p.text.split(":", 1)
+                        tech_details[key.strip()] = value.strip()
                 except Exception as e:
                     print("Błąd przy pobieraniu danych kodowych:", e)
 
@@ -88,7 +105,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     accordion = product.find_element(By.XPATH, './/div[@data-role="accordion"]')
                     details_container = accordion.find_element(By.XPATH, './/div[contains(@class, "py-4")]')
                     detail_elements = details_container.find_elements(By.XPATH, './/div[@class="py-1"]')
-                    for detail in detail_elements:
+                    for detail in detail_elements[1:]: #nie potrzebny nam stan "nowy" 
                         spans = detail.find_elements(By.TAG_NAME, "span")
                         if len(spans) >= 2:
                             key = spans[0].get_attribute("textContent").strip().replace(":", "")
@@ -105,17 +122,20 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                                                          './/span[contains(@class, "font-bold")]').text.strip()
                     opinions = review_element.find_element(By.XPATH,
                                                            './/span[not(contains(@class, "font-bold"))]').text.strip()
-                    reviews = f"{rating} {opinions}"
-                except Exception as e:
-                    reviews = ""
+                    match = re.search(r"\d+", opinions)
+                    opinions = int(match.group()) if match else 0
+                except:
+                    rating = 0
+                    opinions = 0
 
                 # Zapis do pliku CSV
                 writer.writerow({
                     "title": title,
+                    "date": today_date,
                     "product_link": product_link,
-                    "price": price,
-                    "image_url": image_url,
-                    "reviews": reviews,
+                    #"image_url": image_url,
+                    "rating": rating,
+                    "num_of_opinions": opinions, 
                     "tech_details": json.dumps(tech_details, ensure_ascii=False)
                 })
                 print(f"  Scraped: {title}")
