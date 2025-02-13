@@ -1,4 +1,6 @@
 # Biblioteki
+import sys
+from loguru import logger
 import re
 import csv
 import json
@@ -19,11 +21,18 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-# Plik CSV, do którego zapiszemy dane
-output_file = "morele_telefony.csv"
+
+
 # Definiujemy pola CSV
-fieldnames = ["title", "date","price", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
+fieldnames = ["title", "price", "product_link", "num_of_opinions", "rating"] 
 today_date = datetime.today().strftime("%d-%m-%Y")
+output_file = f"morele_telefony_{today_date}.csv"
+
+logger.remove()
+logger.add(f'log_morele_{today_date}.log',
+           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
+           serialize=True,
+           level='WARNING',)
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -65,7 +74,9 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 link_element = product.find_element(By.XPATH, './/a[@class="productLink"]')
                 title = link_element.get_attribute("title")
                 product_link = link_element.get_attribute("href")
-                title = title.replace("Smartfon", "").strip() #Obcięcie słowa "smartfon" z nazwy
+                title = title.replace("Smartfon", "").strip()  # Obcięcie słowa "smartfon" z nazwy
+
+                # Pobranie ceny
                 try:
                     price_element = WebDriverWait(product, 1).until(
                         EC.presence_of_element_located((By.XPATH, './/div[@class="price-new"]'))
@@ -73,19 +84,35 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     price_text = price_element.text.strip()
                 except:
                     price_text = ""
+                    logger.error(f"Nie wykryto ceny dla: {title}")
+
+                try:
+                    num_of_opinions = product.find_element(By.XPATH, './/span[@class="rating-count"]').text
+                    match = re.search(r"\d+", num_of_opinions)
+                    num_of_opinions = int(match.group()) if match else 0
+                except:
+                    num_of_opinions = 0
+                    logger.error(f"Nie wykryto liczby opinii dla: {title}")
+
+                try:
+                    rating = product.find_element(By.XPATH,'.//input[@type="radio" and @checked="checked"]').get_attribute("value")
+                except:
+                    rating = 0
+                    logger.error(f"Nie wykryto oceny dla: {title}")
 
                 # Zapis do pliku CSV
                 writer.writerow({
                     "title": title,
-                    "date": today_date,
                     "price": price_text,
                     "product_link": product_link,
-
+                    "num_of_opinions": num_of_opinions,
+                    "rating": rating,
                 })
                 print(f"Scraped: {title}")
+            
             except Exception as e:
-                print("Błąd przy przetwarzaniu produktu:", e)
-
+                logger.error(f"Błąd podczas przetwarzania produktu: {str(e)}")
+    
         # Sprawdzenie, czy przycisk „nawiguj do następnej strony” jest dostępny
         try:
             next_arrow = driver.find_elements(By.XPATH, '//a[@class="pagination-btn" and i[@class="icon-arrow-right"]]')
