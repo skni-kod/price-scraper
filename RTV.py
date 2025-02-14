@@ -1,4 +1,5 @@
 import re
+from loguru import logger
 import csv
 import json
 from datetime import datetime
@@ -17,10 +18,16 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-output_file = "RTV_telefony.csv"
+
 fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
 today_date = datetime.today().strftime("%d-%m-%Y")
+output_file = f"RTV_telefony_{today_date}.csv"
 
+logger.remove()
+logger.add(f'log_RTV_{today_date}.log',
+           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
+           serialize=True,
+           level='INFO',)
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -34,7 +41,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
         if page == 1:
             url = "https://www.euro.com.pl/telefony-komorkowe.bhtml"
         else:
-            url = f"https://www.euro.com.pl/telefony-komorkowe,strona-{page}.bhtml"
+            url = f"https://www.euro.com.pl/telefony-komorkowe,strona-{page}.bhtml" 
         print(f"Scraping strony {page}: {url}")
 
         driver.get(url)
@@ -47,7 +54,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
         products = driver.find_elements(By.XPATH,
                                         '//div[@class="product-medium-box"]')    
         if not products:
-            print("Brak produktów na stronie, kończę scraping.")
+            logger.info("Brak produktów na stronie, kończę scraping")
             break
 
          # Iteracja po produktach na stronie
@@ -77,7 +84,8 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 
 
             except Exception as e:
-                print("Błąd przy przetwarzaniu produktu:", e)
+                logger.error(f"Błąd przy przetwarzaniu produktu: {e}")
+
 
         # Czekamy na przycisk 'Załaduj więcej'
         try:
@@ -86,11 +94,12 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 print("Przechodzę na następną stronę...")
                 page += 1
             else:
-                print("Brak przycisku 'Załaduj więcej' – zakończono scraping.")
+                logger.error(f"Brak przycisku 'Załaduj więcej' – zakończono scraping.")
                 break
         except Exception as e:
-            print("Błąd przy klikaniu przycisku 'Załaduj więcej':", e)
+            logger.error(f"Błąd przy klikaniu przycisku 'Załaduj więcej': {e}")
             break
 
 driver.quit()
+logger.info("Zakończono scraping. Dane zapisane w pliku:")
 print("Zakończono scraping. Dane zapisane w pliku:", output_file)
