@@ -1,4 +1,5 @@
 import re
+from loguru import logger
 import csv
 import json
 from datetime import datetime
@@ -9,7 +10,6 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from loguru import logger
 
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
