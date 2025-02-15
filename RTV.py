@@ -8,7 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+from selenium.common.exceptions import TimeoutException
+from loguru import logger
 
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
@@ -17,40 +18,44 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-output_file = "RTV_telefony.csv"
+SHOP_NAME = "RTV-EURO-AGD"
 fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
 today_date = datetime.today().strftime("%d-%m-%Y")
+output_file = f"{SHOP_NAME}_{today_date}.csv"
 
+logger.add(f"log_{SHOP_NAME}_{today_date}.log", rotation="10 MB", level="INFO", encoding="utf-8")
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
-
     page = 1
-    while True:
-
-        
+    while True: 
         if page == 1:
             url = "https://www.euro.com.pl/telefony-komorkowe.bhtml"
         else:
             url = f"https://www.euro.com.pl/telefony-komorkowe,strona-{page}.bhtml"
-        print(f"Scraping strony {page}: {url}")
+        logger.info(f"Scraping strony {page}: {url}")
 
         driver.get(url)
 
-        #Czekamy na załadowanie produktów (na razie na sleep)
-        time.sleep(4)
+        #Czekamy na załadowanie produktów
+        try:
+            WebDriverWait(driver, 10).until(
+            EC.visibility_of_all_elements_located((By.CLASS_NAME, "product-medium-box"))
+        )
+        except TimeoutException:
+            logger.warning("Element 'product-medium-box' nie pojawił się")
         
 
         # Pobieramy wszystkie produkty na stronie
         products = driver.find_elements(By.XPATH,
                                         '//div[@class="product-medium-box"]')    
         if not products:
-            print("Brak produktów na stronie, kończę scraping.")
+            logger.info("Brak produktów na stronie, kończę scraping.")
             break
 
-         # Iteracja po produktach na stronie
+        # Iteracja po produktach na stronie
         for product in products:
 
             try:
@@ -65,32 +70,54 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
                 price_total_text = f"{parted_price_total.text.strip()},{parted_price_decimal.text.strip()}"
 
+                # Pobieranie oceny
+                try:
+                    rating = "{}/5".format(product.find_element(By.XPATH, './/span[@class="client-rate__rate"]').text)
+                    num_of_opinions = product.find_element(By.XPATH, './/span[@class="client-rate__opinions"]').text.split()[0]
+                except Exception as e:
+                        logger.warning(f"Brak oceny lub opinii dla produktu {title}: {e}")
+                        rating = "Brak opinii"
+                        num_of_opinions = "Brak opinii"
+
+                # Pobieranie danych technicznych
+                tech_details = {}
+                try:
+                    technical_data_div = product.find_element(By.XPATH, './/div[@class="technical-data"]')
+                    technical_data_items = technical_data_div.find_elements(By.XPATH, './/li[@class="technical-data__list-item"]')
+
+                    for data_item in technical_data_items:
+                        data_item_key = data_item.find_element(By.XPATH, './/span[@class="technical-data__list-item-name"]').text.strip().replace(":", "")
+                        data_item_value = data_item.find_element(By.XPATH, './/span[@class="technical-data-item-text"]').text.strip()
+                        tech_details[data_item_key] = data_item_value
+
+                except Exception as e:
+                    logger.error(f"Błąd przy pobieraniu szczegółów technicznych dla {title}: {e}")
+                
                 # Zapis do pliku CSV
                 writer.writerow({
                     "title": title,
                     "date": today_date,
                     "price": price_total_text,
                     "product_link": product_link,
-
+                    "rating": rating,
+                    "num_of_opinions": num_of_opinions,
+                    "tech_details": json.dumps(tech_details, ensure_ascii=False)
                 })
-                print(f"Scraped: {title}")
+                logger.info(f"Scraped: {title}")
                 
-
             except Exception as e:
-                print("Błąd przy przetwarzaniu produktu:", e)
+                logger.error(f"Błąd przy przetwarzaniu produktu: {e}")
 
         # Czekamy na przycisk 'Załaduj więcej'
         try:
-            next_button = driver.find_element(By.XPATH, '//a[@data-aut-id="show-more-products-button"]')
-            if next_button.is_enabled():
-                print("Przechodzę na następną stronę...")
-                page += 1
-            else:
-                print("Brak przycisku 'Załaduj więcej' – zakończono scraping.")
-                break
-        except Exception as e:
-            print("Błąd przy klikaniu przycisku 'Załaduj więcej':", e)
+            next_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, '//a[@data-aut-id="show-more-products-button"]'))
+            )
+            logger.info("Przechodzę na następną stronę...")
+            page += 1
+        except Exception:
+            logger.info("Brak przycisku 'Załaduj więcej' – zakończono scraping.")
             break
 
 driver.quit()
-print("Zakończono scraping. Dane zapisane w pliku:", output_file)
+logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
