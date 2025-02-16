@@ -24,7 +24,7 @@ driver = webdriver.Firefox(service=service, options=options)
 
 
 # Definiujemy pola CSV
-fieldnames = ["title", "price", "product_link", "num_of_opinions", "rating"] 
+fieldnames = ["title", "price", "product_link", "num_of_opinions", "rating", "additional_info"] 
 today_date = datetime.today().strftime("%d-%m-%Y")
 output_file = f"morele_telefony_{today_date}.csv"
 
@@ -75,6 +75,9 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 title = link_element.get_attribute("title")
                 product_link = link_element.get_attribute("href")
                 title = title.replace("Smartfon", "").strip()  # Obcięcie słowa "smartfon" z nazwy
+                przed_gb, po_gb = (re.split(r'GB\s*', title, maxsplit=1) + [""])[:2]
+                lista_po_gb = po_gb.split()
+                lista_po_gb = [x for x in lista_po_gb if x!= "-"]
 
                 # Pobranie ceny
                 try:
@@ -102,11 +105,12 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
                 # Zapis do pliku CSV
                 writer.writerow({
-                    "title": title,
+                    "title": przed_gb,
                     "price": price_text,
                     "product_link": product_link,
                     "num_of_opinions": num_of_opinions,
                     "rating": rating,
+                    "additional_info": lista_po_gb,
                 })
                 print(f"Scraped: {title}")
             
