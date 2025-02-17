@@ -1,6 +1,8 @@
 import re
+from loguru import logger
 import csv
 import json
+import time
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -17,11 +19,18 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-# Plik CSV, do którego zapiszemy dane
-output_file = "mediaExpert_telefony.csv"
 # Definiujemy pola CSV
 fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"] #Fajnie by było znać datę kiedy jaka cena występowała
 today_date = datetime.today().strftime("%d-%m-%Y")
+output_file = f"mediaExpert_telefony_{today_date}.csv"
+
+logger.remove()
+logger.add(f'log_mediaExpert_{today_date}.log',
+           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
+           serialize=True,
+           level='WARNING',)
+
+
 
 with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -35,6 +44,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
         else:
             url = f"https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony?page={page}"
         print(f"Scraping strony {page}: {url}")
+        logger.info(f"Scraping strony {page}: {url}")
 
         driver.get(url)
 
@@ -47,6 +57,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             wait.until(EC.presence_of_all_elements_located((By.XPATH, '//div[@data-v-5ad6e584]')))
         except Exception as e:
             print("Błąd oczekiwania na produkty:", e)
+            logger.error(f"Błąd oczekiwania na produkty: {e}")
             break
 
         products = driver.find_elements(By.XPATH,
@@ -63,14 +74,17 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 # Pobranie tytułu oraz linku produktu
                 link_element = product.find_element(By.XPATH, './/a[@href]')
                 title = link_element.text
+                title = title.replace("Smartfon", "").strip()
                 product_link = link_element.get_attribute("href")
 
                 # Pobranie ceny produktu
-                cala = product.find_element(By.XPATH,'.//span[@class="whole"]').text.strip()
-                grosze =product.find_element(By.XPATH,'.//span[@class="cents"]').text.strip()
-                waluta = product.find_element(By.XPATH,'.//span[@class="currency"]').text.strip()
-
-                price_text = f"{cala}.{grosze} {waluta}"
+                try:
+                    cala = product.find_element(By.XPATH,'.//span[@class="whole"]').text.strip()
+                    grosze =product.find_element(By.XPATH,'.//span[@class="cents"]').text.strip()
+                    waluta = product.find_element(By.XPATH,'.//span[@class="currency"]').text.strip()
+                    price_text = f"{cala}.{grosze} {waluta}"
+                except:
+                    logger.error(f"Nie wykryto ceny: {title}")
                 #price_text = price_element.text.strip()
 
 
@@ -81,34 +95,34 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 # image_url = img_element.get_attribute("src")
 
                 # Pobieranie danych technicznych
-                tech_details = {}
+                # tech_details = {}
 
                 # Część 1: Dane widoczne (np. kody systemowy/producenta)
-                try:
-                    code_elements = product.find_elements(By.XPATH,
-                                                          './/span[@class="is-regular"]')
-                    for p in code_elements:
-                        #if text and ':' in text: Komputronik zawsze ma podany jakiś kod producenta lub systemowy, szkoda czasu żeby ciągle to sprawdzać
-                            # key, value = text.split(":", 1)
-                            # tech_details[key.strip()] = value.strip()
-                        key, value = p.text.split(":", 1)
-                        tech_details[key.strip()] = value.strip()
-                except Exception as e:
-                    print("Błąd przy pobieraniu danych kodowych:", e)
+                # try:
+                #     code_elements = product.find_elements(By.XPATH,
+                #                                           './/span[@class="is-regular"]')
+                #     for p in code_elements:
+                #         #if text and ':' in text: Komputronik zawsze ma podany jakiś kod producenta lub systemowy, szkoda czasu żeby ciągle to sprawdzać
+                #             # key, value = text.split(":", 1)
+                #             # tech_details[key.strip()] = value.strip()
+                #         key, value = p.text.split(":", 1)
+                #         tech_details[key.strip()] = value.strip()
+                # except Exception as e:
+                #     print("Błąd przy pobieraniu danych kodowych:", e)
 
                 # Część 2: Szczegóły techniczne z accordionu
-                try:
-                    accordion = product.find_element(By.XPATH, './/table[contains(@class, "list") and contains(@class, "attributes")]')
-                    details_container = accordion.find_elements(By.XPATH, './/tr[@class="item"]')
-                    for detail in details_container:
-                        # key = detail.find_element(By.XPATH,'.//th//span[@class="attribute-name"]').text.strip().replace(":", "")
-                        key = detail.find_element(By.XPATH,'.//th//span[contains(@class, "attribute-name")]').text.strip().replace(":", "")
-                        value = detail.find_element(By.XPATH,'.//td//span[contains(@class, "attribute-value")]').text.strip()
-                        tech_details[key] = value
-
-
-                except Exception as e:
-                    print("Błąd przy pobieraniu szczegółów technicznych:", e)
+                # try:
+                #     accordion = product.find_element(By.XPATH, './/table[contains(@class, "list") and contains(@class, "attributes")]')
+                #     details_container = accordion.find_elements(By.XPATH, './/tr[@class="item"]')
+                #     for detail in details_container:
+                #         # key = detail.find_element(By.XPATH,'.//th//span[@class="attribute-name"]').text.strip().replace(":", "")
+                #         key = detail.find_element(By.XPATH,'.//th//span[contains(@class, "attribute-name")]').text.strip().replace(":", "")
+                #         value = detail.find_element(By.XPATH,'.//td//span[contains(@class, "attribute-value")]').text.strip()
+                #         tech_details[key] = value
+                #
+                #
+                # except Exception as e:
+                #     print("Błąd przy pobieraniu szczegółów technicznych:", e)
 
                 # Pobieranie opinii (łączymy ocenę oraz liczbę opinii w jedno pole "reviews")
                 try:
@@ -134,19 +148,19 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 except:
                     rating = 0
                     opinions = 0
+                    logger.error(f"Nie znaleziono oceny: {title}")
 
                 #if(opinions !=0): opinions = opinions - 1
 
                 # Zapis do pliku CSV
                 writer.writerow({
-                    "title": title,
                     "date": today_date,
+                    "title": title,
                     "price": price_text,
-                    "product_link": product_link,
-                    #"image_url": image_url,
                     "rating": rating,
                     "num_of_opinions": opinions,
-                    "tech_details": json.dumps(tech_details, ensure_ascii=False)
+                    "product_link": product_link
+                    # "tech_details": json.dumps(tech_details, ensure_ascii=False)
                 })
                 print(f"  Scraped: {title}")
             except Exception as e:
@@ -158,9 +172,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             # print(number)
             if int(number) <= page:
                 print("Ostatnia strona – zakończono scraping.")
+                logger.info("Ostatnia strona – zakończono scraping.")
                 break
         except Exception as e:
             print("Błąd przy sprawdzaniu następnej strony:", e)
+            logger.error(f"Błąd przy sprawdzaniu następnej strony: {e}")
             break
 
         page += 1
@@ -171,3 +187,4 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 # Zamknięcie przeglądarki
 driver.quit()
 print("Zakończono scraping. Dane zapisane w pliku:", output_file)
+logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
