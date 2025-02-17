@@ -114,25 +114,29 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 try:
                     review_element = product.find_element(By.XPATH,
                                                           './/div[contains(@class, "product-rating")]')
-                    rating1 = review_element.find_elements(By.XPATH,
-                                                         './/i[contains(@class, "icon-star01")]')
-                    rating2 = review_element.find_elements(By.XPATH,
+                    fullStar = review_element.find_elements(By.XPATH,
+                                                           './/i[contains(@class, "is-filled")]')
+                    halfStar = review_element.find_elements(By.XPATH,
                                                            './/svg[contains(@class, "is-half-filled")]')
                     opinions = review_element.find_element(By.XPATH,
-                                                           './/span[(contains(@class, "count-number"))]').text.strip()
+                                                           './/span[contains(@class, "count-number")]').text.strip()
+                    # opinions = product.find_element(By.XPATH,
+                    #                                        'div[0]/div[0]/div[1]/div[0]/span[0]/span[0]').text.strip()
 
-                    jeden = len(rating1)
-                    if len(rating2)==0: rating = jeden
-                    else: rating=jeden+0.5;
+                    rating = len(fullStar)
+                    # print(rating)
+                    if len(halfStar)>0:
+                        rating += 0.5
 
 
-                    match = re.search(r"\d+", opinions)
-                    opinions = int(match.group()) if match else 0
+                    # match = re.search(r"\d+", opinions)
+                    # opinions = int(match.group()) if match else 0
                 except:
                     rating = 0
                     opinions = 0
 
-                if(opinions !=0): opinions = opinions - 1
+                #if(opinions !=0): opinions = opinions - 1
+
                 # Zapis do pliku CSV
                 writer.writerow({
                     "title": title,
@@ -150,9 +154,10 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
         # Sprawdzenie, czy przycisk „nawiguj do następnej strony” jest dostępny
         try:
-            next_arrow = driver.find_elements(By.XPATH, '//a[@class="icon-next"]')
-            if not next_arrow:
-                print("Brak przycisku 'następna strona' – zakończono scraping.")
+            number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
+            # print(number)
+            if int(number) <= page:
+                print("Ostatnia strona – zakończono scraping.")
                 break
         except Exception as e:
             print("Błąd przy sprawdzaniu następnej strony:", e)
