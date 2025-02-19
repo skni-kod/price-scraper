@@ -20,7 +20,7 @@ options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
 # Definiujemy pola CSV
-fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"] #Fajnie by było znać datę kiedy jaka cena występowała
+fieldnames = ["date", "title", "price",  "rating", "num_of_opinions", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
 today_date = datetime.today().strftime("%d-%m-%Y")
 output_file = f"mediaExpert_telefony_{today_date}.csv"
 
