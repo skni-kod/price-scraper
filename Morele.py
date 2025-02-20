@@ -1,9 +1,9 @@
 # Biblioteki
-import sys
+import os
+import glob
 from loguru import logger
 import re
 import csv
-import json
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,6 +13,28 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # Konfiguracja Firefoksa i Geckodrivera
 # Dla osób z windowsem https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-win32.zip
+
+# Utworzenie folderu output, jeśli nie istnieje
+os.makedirs("output", exist_ok = True)
+
+# Ustawienia nazwy sklepu oraz daty
+shop_name = "morele"
+today = datetime.now().strftime("%Y-%m-%d")
+csv_filename = f"output/{shop_name}_{today}.csv"
+log_filename = f"output/log_{shop_name}_{today}.log"
+
+log_folder = "output"
+logger.remove()  # usuwa domyślne ustawienia
+
+log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
+
+logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
+logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
+
+logger.info("Rozpoczęto scraping.")
+logger.info("Plik CSV: {}", csv_filename)
+logger.info("Plik logu: {}", log_filename)
+
 
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
@@ -24,17 +46,10 @@ driver = webdriver.Firefox(service=service, options=options)
 
 
 # Definiujemy pola CSV
-fieldnames = ["title", "price", "product_link", "num_of_opinions", "rating", "additional_info"] 
-today_date = datetime.today().strftime("%d-%m-%Y")
-output_file = f"morele_telefony_{today_date}.csv"
+fieldnames = ["title", "product_link", "price", "num_of_opinions", "rating", "additional_info"] 
 
-logger.remove()
-logger.add(f'log_morele_{today_date}.log',
-           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
-           serialize=True,
-           level='WARNING',)
 
-with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
+with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -48,23 +63,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
         print(f"Scraping strony {page}: {url}")
 
         driver.get(url)
-
-        # Ponieważ strona ładuje się statycznie, nie trzeba czekać na załadowanie elementów.
-        # Jeśli jednak w przyszłości strona zacznie ładować dane dynamicznie, można odkomentować poniższe linie:
-        #
-        # try:
-        #     # Czekamy aż produkty się załadują
-        #     wait = WebDriverWait(driver, 10)
-        #     wait.until(EC.presence_of_all_elements_located((By.XPATH, '//div[@data-name="listingTile"]')))
-        # except Exception as e:
-        #     print("Błąd oczekiwania na produkty:", e)
-        #     break
-
         products = driver.find_elements(By.XPATH,
                                         '//div[@class="cat-product card"]')
 
         if not products:
-            print("Brak produktów na stronie, kończę scraping.")
+            logger.info("Brak produktów na stronie, kończę scraping.")
             break
 
         # Iteracja po produktach na stronie
@@ -84,10 +87,13 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     price_element = WebDriverWait(product, 1).until(
                         EC.presence_of_element_located((By.XPATH, './/div[@class="price-new"]'))
                     )
-                    price_text = price_element.text.strip()
+                    price = price_element.text.strip()
+                    price = re.sub(r'[^\d,]', '', price)
+                    price = price.replace(',', '.')
+                    price = float(price)
                 except:
-                    price_text = ""
-                    logger.error(f"Nie wykryto ceny dla: {title}")
+                    price = 0
+                    logger.info(f"Nie wykryto ceny dla: {title}")
 
                 try:
                     num_of_opinions = product.find_element(By.XPATH, './/span[@class="rating-count"]').text
@@ -95,24 +101,24 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     num_of_opinions = int(match.group()) if match else 0
                 except:
                     num_of_opinions = 0
-                    logger.error(f"Nie wykryto liczby opinii dla: {title}")
+                    logger.info(f"Nie wykryto liczby opinii dla: {title}")
 
                 try:
                     rating = product.find_element(By.XPATH,'.//input[@type="radio" and @checked="checked"]').get_attribute("value")
                 except:
                     rating = 0
-                    logger.error(f"Nie wykryto oceny dla: {title}")
+                    logger.info(f"Nie wykryto oceny dla: {title}")
 
                 # Zapis do pliku CSV
                 writer.writerow({
                     "title": przed_gb,
-                    "price": price_text,
                     "product_link": product_link,
+                    "price": price,
                     "num_of_opinions": num_of_opinions,
                     "rating": rating,
                     "additional_info": lista_po_gb,
                 })
-                print(f"Scraped: {title}")
+                logger.info("Scraped: {}", title)
             
             except Exception as e:
                 logger.error(f"Błąd podczas przetwarzania produktu: {str(e)}")
@@ -122,17 +128,14 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             next_arrow = driver.find_elements(By.XPATH, '//a[@class="pagination-btn" and i[@class="icon-arrow-right"]]')
 
             if not next_arrow:
-                print("Brak przycisku 'następna strona' – zakończono scraping.")
+                logger.info("Brak przycisku 'następna strona' – zakończono scraping.")
                 break
         except Exception as e:
-            print("Błąd przy sprawdzaniu następnej strony:", e)
+            logger.error("Błąd przy sprawdzaniu następnej strony: {}", e)
             break
 
         page += 1
 
-        # Opcjonalnie: opóźnienie przed przejściem do kolejnej strony
-        # time.sleep(1)
-
-# Zamknięcie przeglądarki
 driver.quit()
-print("Zakończono scraping. Dane zapisane w pliku:", output_file)
+logger.complete()
+logger.info("Zakończono scraping. Dane zapisane w pliku: {}",csv_filename)
