@@ -33,7 +33,6 @@ logger.info("Plik CSV: {}", csv_filename)
 logger.info("Plik logu: {}", log_filename)
 
 csv_pattern = os.path.join(output_folder, f"{shop_name}_*.csv")
-print(csv_pattern)
 csv_files = glob.glob(csv_pattern)
 if not csv_files:
     logger.error("Nie znaleziono plików CSV pasujących do wzorca {}", csv_pattern)
@@ -80,13 +79,15 @@ def scrape_tech_details(url):
         attributes_container = driver.find_element(By.CSS_SELECTOR, '#specification')
         expert_recom = attributes_container.find_element(By.CSS_SELECTOR, 'div > div.product-specification__wrapper > div.expert-table.c-label-description--orange > ul')
         data_phone = expert_recom.find_elements(By.XPATH, './/li')
-        spec_table = attributes_container.find_element(By.CSS_SELECTOR, 'div > div.product-specification__wrapper > div.product-specification__table > div:nth-child(1) > div')
+
 
         tech_data = []
         for i in data_phone:
             tech_data.append(i.text.strip())
+
         tech_details = {item.split("\n", 1)[0]: item.split("\n", 1)[1] for item in tech_data}
         tech_data.clear()
+        
         spec_table = attributes_container.find_element(By.CSS_SELECTOR,'div > div.product-specification__wrapper > div.product-specification__table')
         data_phone = spec_table.find_elements(By.XPATH,'.//div[@class="group__specification"]')
 
