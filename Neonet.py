@@ -47,7 +47,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
     # Pobieramy maksymalną liczbę stron z paginacji
     driver.get(base_url)
     try:
-        pagination_input = WebDriverWait(driver, 10).until(
+        pagination_input = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "section.listingPaginationScss-paginationSection-1VV input[type='number']")
             )
@@ -63,28 +63,37 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
         url = base_url if page == 1 else f"{base_url}?p={page}"
         logger.info("Scraping strony {}: {}", page, url)
         driver.get(url)
-        time.sleep(3)  # początkowe opóźnienie
 
-        # Używamy sekwencji klawiszy END i HOME, aby wymusić pełne wczytanie treści
+        # czekamy na pojawienie się przynajmniej jednego produktu
+        try:
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "section[data-neonet-product-id]"))
+            )
+        except Exception as e:
+            logger.error("Produkty nie załadowały się na stronie {}: {}", page, e)
+
+        # Szybsze scrollowanie – skracamy opóźnienia do 0.5 sekundy
         try:
             body = driver.find_element(By.TAG_NAME, "body")
             for _ in range(2):
                 body.send_keys(Keys.END)
-                time.sleep(1)
+                time.sleep(0.5)
                 body.send_keys(Keys.HOME)
-                time.sleep(1)
+                time.sleep(0.5)
             body.send_keys(Keys.END)
-            time.sleep(3)
+            time.sleep(0.5)
         except Exception as e:
             logger.error("Błąd podczas wysyłania klawiszy END/HOME: {}", e)
 
-        # Czekamy, aż załaduje się przynajmniej 20 produktów lub do upływu timeoutu
-        timeout = time.time() + 20  # 20 sekund timeout
-        products = driver.find_elements(By.CSS_SELECTOR, "section[data-neonet-product-id]")
-        while len(products) < 20 and time.time() < timeout:
-            time.sleep(1)
-            products = driver.find_elements(By.CSS_SELECTOR, "section[data-neonet-product-id]")
+        # Czekamy do 5 sekund, aż załadują się przynajmniej 20 produktów
+        try:
+            WebDriverWait(driver, 5).until(
+                lambda d: len(d.find_elements(By.CSS_SELECTOR, "section[data-neonet-product-id]")) >= 20
+            )
+        except Exception as e:
+            logger.info("Nie udało się załadować pełnej liczby produktów, pobieram to co jest dostępne.")
 
+        products = driver.find_elements(By.CSS_SELECTOR, "section[data-neonet-product-id]")
         if not products:
             logger.info("Brak produktów na stronie, przechodzę do kolejnej.")
             page += 1
@@ -93,17 +102,13 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
         # Iteracja po produktach
         for product in products:
             try:
-                # Pobranie tytułu i linku produktu
                 title_element = product.find_element(By.XPATH, './/h2[contains(@class, "listingItemHeaderScss-name")]')
                 title = title_element.text.strip()
                 link_element = title_element.find_element(By.XPATH, "./ancestor::a")
                 product_link = link_element.get_attribute("href")
-
-                # Pobranie ceny produktu
                 price_element = product.find_element(By.XPATH, './/span[@data-marker="UIPriceSimple"]')
                 price = price_element.text.strip()
 
-                # Pobranie URL obrazka produktu
                 try:
                     img_element = product.find_element(By.XPATH, './/img')
                     image_url = img_element.get_attribute("src")
@@ -111,16 +116,14 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                     image_url = ""
                     logger.info("Brak obrazka dla produktu '{}'.", title)
 
-                # Pobranie opinii: rating i liczba opinii
                 try:
                     review_section = product.find_element(By.CSS_SELECTOR, "section.ratingStarsScss-wrapper-1mq")
                     rating_span = review_section.find_element(By.CSS_SELECTOR, "span.ratingStarsScss-rating-3xe")
                     style_attr = rating_span.get_attribute("style")  # np. "width: 100%;"
                     rating_percent = style_attr.split("width:")[1].split("%")[0].strip()
-                    rating_value = round(float(rating_percent) / 20, 1)  # 100% -> 5.0, 90% -> 4.5, etc.
-
+                    rating_value = round(float(rating_percent) / 20, 1)
                     count_span = review_section.find_element(By.CSS_SELECTOR, "span.ratingStarsScss-count-1T-")
-                    review_count_text = count_span.text.strip()  # np. "(34)"
+                    review_count_text = count_span.text.strip()
                     review_count = review_count_text.strip("()")
                     reviews = f"{rating_value}/5 ({review_count} opinii)"
                 except Exception as e:

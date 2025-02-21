@@ -8,7 +8,9 @@ from loguru import logger
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
-from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # Konfiguracja folderu output
 output_folder = "output"
@@ -22,9 +24,8 @@ today = datetime.now().strftime("%Y-%m-%d")
 csv_pattern = os.path.join(output_folder, f"{shop_name}_*.csv")
 log_filename = os.path.join(output_folder, f"log_tech_details_{shop_name}_{today}.log")
 
-# Konfiguracja logowania za pomocą loguru
+# Konfiguracja logowania za pomocą loguru (format zgodny z przykładowymi logami)
 logger.remove()
-# Używamy formatu zgodnego z przykładowymi logami
 log_format = "{time:YYYY-MM-DDTHH:mm:ss.SSSSSSZZ} - {level} - {message}"
 logger.add(log_filename, level="INFO", format=log_format, encoding="utf-8")
 logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
@@ -64,12 +65,8 @@ with open(latest_csv_file, mode="r", encoding="utf-8") as f:
     reader = csv.DictReader(f)
     for row in reader:
         if row.get("product_link"):
-            product_data.append({
-                "product_link": row["product_link"],
-            })
+            product_data.append({"product_link": row["product_link"]})
 logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
-
-
 
 # Konfiguracja Selenium (Firefox, Geckodriver)
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
@@ -88,10 +85,13 @@ def scrape_tech_details(url):
     while attempts < max_attempts:
         try:
             driver.get(url)
-            time.sleep(3)  # oczekiwanie na załadowanie strony
-
-            container = driver.find_element(By.XPATH,
-                                            '//section[@class="FeaturedTechnicalSpecificationsScss-root-oUb" and @role="presentation"]')
+            # Czekamy maksymalnie 5 sekund na pojawienie się kontenera z danymi technicznymi
+            container = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.XPATH,
+                     '//section[@class="FeaturedTechnicalSpecificationsScss-root-oUb" and @role="presentation"]')
+                )
+            )
             table = container.find_element(By.XPATH, './/table[@data-id="tableFeaturedTechnicalSpecifications"]')
             rows = table.find_elements(By.XPATH, './/tr')
             for row in rows:
@@ -112,7 +112,7 @@ def scrape_tech_details(url):
                 except Exception:
                     pass
                 driver = webdriver.Firefox(service=service, options=options)
-                time.sleep(2)
+                time.sleep(1)
             else:
                 logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
             attempts += 1
