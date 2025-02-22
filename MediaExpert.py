@@ -23,16 +23,22 @@ driver = webdriver.Firefox(service=service, options=options)
 # Definiujemy pola CSV
 fieldnames = ["date", "title", "price",  "rating", "num_of_opinions", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
 today_date = datetime.today().strftime("%d-%m-%Y")
-output_file = f"mediaExpert_{today_date}.csv"
+shop_name = "mediaExpert"
+csv_filename = f"{shop_name}_{today_date}.csv"
+log_filename = f"{shop_name}_{today_date}.log"
+
 
 logger.remove()
-logger.add(f'mediaExpert_{today_date}.log',
-           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
-           serialize=True,
-           level='WARNING',)
+log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
+logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
+logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
+
+logger.info("Rozpoczęto scraping.")
+logger.info("Plik CSV: {}", csv_filename)
+logger.info("Plik logu: {}", log_filename)
 
 
-with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
+with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -43,15 +49,10 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             url = "https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony"
         else:
             url = f"https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony?page={page}"
-        print(f"Scraping strony {page}: {url}")
-        logger.info(f"Scraping strony {page}: {url}")
+        logger.info("Scraping strony {}: {}", page, url)
 
         driver.get(url)
-        time.sleep(1)
 
-        # Ponieważ strona ładuje się statycznie, nie trzeba czekać na załadowanie elementów.
-        # Jeśli jednak w przyszłości strona zacznie ładować dane dynamicznie, można odkomentować poniższe linie:
-        #
         try:
             # Czekamy aż produkty się załadują
             wait = WebDriverWait(driver, 10)
@@ -60,17 +61,15 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             # print("Błąd oczekiwania na produkty:", e)
             logger.error(f"Błąd oczekiwania na produkty: {e}")
             break
-        time.sleep(1)
+        # time.sleep(1)
 
         products = driver.find_elements(By.CSS_SELECTOR, "div.offer-box")
         products_count = len(products)
         print(f"Znaleziono {products_count} produktów.")
 
-
         if not products:
-            print("Brak produktów na stronie, kończę scraping.")
+            logger.info("Brak produktów na stronie, kończę scraping.")
             break
-
 
         def process_product(index, retries=3):
             """
@@ -107,10 +106,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     except Exception:
                         rating = None
                         reviews = None
+                        logger.info("Brak opinii dla produktu '{}'.", product_name)
 
                     try:
                         # Pobranie tytułu oraz linku produktu
-                        link_element = product.find_element(By.XPATH, './/a[@href]')
+                        link_element = product.find_element(By.CSS_SELECTOR, 'h2.name a.ui-link')
                         title = link_element.text
                         title = title.replace("Smartfon", "").strip()
                         product_link = link_element.get_attribute("href")
@@ -123,8 +123,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                             price_text = f"{cala}.{grosze} {waluta}"
                         except:
                             price_text = "Brak Danych"
-                            logger.error(f"Nie wykryto ceny: {title}")
-                        # price_text = price_element.text.strip()
+                            logger.info(f"Nie wykryto ceny: {title}")
 
 
                         return product_name, rating, reviews, price_text, product_link
@@ -133,7 +132,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
                 except StaleElementReferenceException:
                     if attempt < retries - 1:
-                        time.sleep(1)
+                        # time.sleep(1)
                         continue  # ponów próbę
                     else:
                         raise
@@ -149,7 +148,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
 
                 # Sprawdzanie duplikatów
                 if product_name in seen_products:
-                    print(f"Produkt '{product_name}' został już przetworzony, pomijam duplikat.")
+                    logger.info("Produkt '{}' został już przetworzony, pomijam duplikat.", product_name)
                     continue
                 seen_products.add(product_name)
 
@@ -164,10 +163,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     "product_link": product_link
                     # "tech_details": json.dumps(tech_details, ensure_ascii=False)
                 })
-                print(f"  Scraped: {product_name}")
+                logger.info("Scraped: {}", product_name)
 
             except Exception as e:
-                print(f"Błąd przy produkcie numer {i}: {e}")
+                logger.error("Błąd przy przetwarzaniu produktu: {}", e)
+
                 # Sprawdzenie, czy przycisk „nawiguj do następnej strony” jest dostępny
         try:
             number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
@@ -178,11 +178,11 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                 break
         except Exception as e:
             print("Błąd przy sprawdzaniu następnej strony:", e)
-            logger.error(f"Błąd przy sprawdzaniu następnej strony: {e}")
+            logger.error("Błąd przy sprawdzaniu następnej strony: {}",e)
             break
 
         page += 1
 
 driver.quit()
-print("Zakończono scraping. Dane zapisane w pliku:", output_file)
-logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
+logger.complete()
+logger.info(f"Zakończono scraping. Dane zapisane w pliku: {csv_filename}")
