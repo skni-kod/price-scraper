@@ -11,7 +11,6 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# from Komputronik import output_file
 
 # Konfiguracja Firefoksa i Geckodrivera
 
@@ -23,17 +22,23 @@ options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
 # Definiujemy pola CSV
-fieldnames = ["title", "tech_info"]
+fieldnames = ["product_link", "tech_info"]
 today_date = datetime.today().strftime("%d-%m-%Y")
 
+shop_name = "mediaExpert"
+log_filename = f"{shop_name}Tech_{today_date}.log"
+
 logger.remove()
-logger.add(f'medExpDaneTech_{today_date}.log',
-           format="{time: MMMM D, YYYY - HH:mm:ss} {level} --- <red>{message}</red>",
-           serialize=True,
-           level='WARNING',)
+log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
+logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
+logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
 
 
 pliki = glob.glob("mediaExpert_*.csv")
+
+if not pliki:
+    logger.error("Nie znaleziono plików CSV pasujących do wzorca")
+    exit(1)
 
 def newfile(file):
     data = file.split("_")[-1].replace(".csv", "")
@@ -41,71 +46,59 @@ def newfile(file):
 
 input_file = max(pliki, key=newfile)
 output_file = f"medExpDaneTech_{today_date}.csv"
-# print(output_file)
 
-with open(input_file, mode="r", encoding="utf-8") as csvfile, open(output_file, mode="w", newline="\n", encoding="utf-8") as output:
+logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
+logger.info("Plik CSV: {}", input_file)
+logger.info("Plik logu: {}", log_filename)
+
+def scrape_tech_details(url):
+    tech_details = {}
+    try:
+        driver.get(url)
+        time.sleep(2)
+
+        attributes_container = driver.find_element(By.CSS_SELECTOR,"table.list.attributes")
+        detail_elements = attributes_container.find_elements(By.CSS_SELECTOR, 'tbody tr.item')
+
+        for element in detail_elements:
+            try:
+                key = element.find_element(By.CSS_SELECTOR, 'th.name.attribute span').text.strip().replace(":", "")
+                value = element.find_element(By.CSS_SELECTOR, 'td.values.attribute span').text.strip()
+                tech_details[key] = value
+            except Exception as inner_e:
+                logger.info("Błąd przy przetwarzaniu detalu: {}", inner_e)
+    except Exception as e:
+        logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
+    return tech_details
+
+
+product_data = []
+with open(input_file, mode="r", encoding="utf-8") as csvfile:
     reader = csv.DictReader(csvfile)
+    for row in reader:
+        if row.get("product_link"):
+            product_data.append({
+                "product_link": row["product_link"],
+            })
+logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
+timer = 0
+with open(output_file, mode="w", newline="\n", encoding="utf-8") as output:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
-    test = 0
-    for row in reader:
-        url = row["product_link"]
-        # print(url)
-        driver.get(url)
-
-        # try:
-        #     # Czekamy aż produkty się załadują
-        #     wait = WebDriverWait(driver, 10)
-        #     wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR,"table.list")))
-        # except Exception as e:
-        #     print("Błąd oczekiwania na produkty:", e)
-        #     logger.error(f"Błąd oczekiwania na produkty: {e}")
-        #     break
-
-        time.sleep(2)
-        if test%20==0:
-            time.sleep(10)
-
-        # Pobranie tytułu
-
-        # try:
-        #     title = driver.find_element(By.CSS_SELECTOR,"h1.is-title").text
-        #     title = title.replace("Smartfon", "").strip()
-        #
-        #     # print(title)
-        #
-        # except Exception as e:
-        #     print("Błąd przy przetwarzaniu produktu: ", e)
-        #     logger.error(f"Błąd przy przetwarzaniu produktu: {e}")
-        title = row["title"]
-
-
-        # Pobieranie danych technicznych
-        tech_details = {}
-
-        # Część 2: Szczegóły techniczne z accordionu
-        try:
-            accordion = driver.find_element(By.XPATH,
-                                            './/table[contains(@class, "list") and contains(@class, "attributes")]')
-            details_container = accordion.find_elements(By.XPATH, './/tr[@class="item"]')
-            for detail in details_container:
-                # key = detail.find_element(By.XPATH,'.//th//span[@class="attribute-name"]').text.strip().replace(":", "")
-                key = detail.find_element(By.XPATH,'.//th//span[contains(@class, "attribute-name")]').text.strip().replace(":","")
-                value = detail.find_element(By.XPATH, './/td//span[contains(@class, "attribute-value")]').text.strip()
-                tech_details[key] = value
-        except Exception as e:
-            print("Błąd przy pobieraniu szczegółów technicznych:", e)
+    for item in product_data:
+        timer += 1
+        if(timer % 20 == 0): time.sleep(10)
+        url = item["product_link"]
+        logger.info("Przetwarzanie: {}", url)
+        details = scrape_tech_details(url)
 
         writer.writerow({
-            "title": title,
-            "tech_info": json.dumps(tech_details, ensure_ascii=False)
+            "product_link": url,
+            "tech_info": json.dumps(details, ensure_ascii=False)
         })
-        test+=1
-        print(f"  Scraped: {title}")
-        # time.sleep(1)
-
 
 # Zamknięcie przeglądarki
 driver.quit()
-print("Zakończono scraping. Dane zapisane w pliku:", output_file)
+logger.complete()
+# print("Zakończono scraping. Dane zapisane w pliku:", output_file)
 logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
