@@ -13,7 +13,6 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 # Konfiguracja Firefoksa i Geckodrivera
-
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
@@ -55,6 +54,12 @@ def scrape_tech_details(url):
     tech_details = {}
     try:
         driver.get(url)
+        try:
+            # Czekamy aż produkty się załadują
+            wait = WebDriverWait(driver, 10)
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR,"table.list.attributes")))
+        except Exception as e:
+            logger.error(f"Błąd oczekiwania na produkty: {e}")
         time.sleep(2)
 
         attributes_container = driver.find_element(By.CSS_SELECTOR,"table.list.attributes")
@@ -62,7 +67,7 @@ def scrape_tech_details(url):
 
         for element in detail_elements:
             try:
-                key = element.find_element(By.CSS_SELECTOR, 'th.name.attribute span').text.strip().replace(":", "")
+                key = element.find_element(By.CSS_SELECTOR, 'th.name.attribute span').text.replace(":", "").strip()
                 value = element.find_element(By.CSS_SELECTOR, 'td.values.attribute span').text.strip()
                 tech_details[key] = value
             except Exception as inner_e:
@@ -70,7 +75,6 @@ def scrape_tech_details(url):
     except Exception as e:
         logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
     return tech_details
-
 
 product_data = []
 with open(input_file, mode="r", encoding="utf-8") as csvfile:
@@ -81,24 +85,23 @@ with open(input_file, mode="r", encoding="utf-8") as csvfile:
                 "product_link": row["product_link"],
             })
 logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
-timer = 0
-with open(output_file, mode="w", newline="\n", encoding="utf-8") as output:
+# timer = 0
+with open(output_file, mode="w", newline="", encoding="utf-8") as output:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for item in product_data:
-        timer += 1
-        if(timer % 20 == 0): time.sleep(10)
-        url = item["product_link"]
-        logger.info("Przetwarzanie: {}", url)
-        details = scrape_tech_details(url)
+        # timer += 1
+        # if(timer % 15 == 0): time.sleep(10)
+        link = item["product_link"]
+        logger.info("Przetwarzanie: {}", link)
+        details = scrape_tech_details(link)
 
         writer.writerow({
-            "product_link": url,
+            "product_link": link,
             "tech_info": json.dumps(details, ensure_ascii=False)
         })
 
 # Zamknięcie przeglądarki
 driver.quit()
 logger.complete()
-# print("Zakończono scraping. Dane zapisane w pliku:", output_file)
-logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
+logger.info("Zakończono pobieranie szczegółów technicznych. Dane zapisane w pliku: {}", output_file)
