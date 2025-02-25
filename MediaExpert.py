@@ -58,24 +58,19 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             wait = WebDriverWait(driver, 10)
             wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.offer-box")))
         except Exception as e:
-            # print("Błąd oczekiwania na produkty:", e)
-            logger.error(f"Błąd oczekiwania na produkty: {e}")
+            logger.error("Błąd oczekiwania na produkty: {}",e)
             break
         # time.sleep(1)
 
         products = driver.find_elements(By.CSS_SELECTOR, "div.offer-box")
         products_count = len(products)
-        print(f"Znaleziono {products_count} produktów.")
+        logger.info("Znaleziono {} produktów.", products_count)
 
         if not products:
             logger.info("Brak produktów na stronie, kończę scraping.")
             break
 
         def process_product(index, retries=3):
-            """
-            Próbuje odczytać dane produktu o danym indeksie, przy maksymalnie `retries` próbach.
-            Jeśli element staje się "stale", następuje ponowienie próby.
-            """
             for attempt in range(retries):
                 try:
                     # Pobierz aktualną listę produktów, aby nie operować na "starych" referencjach
@@ -84,7 +79,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
                     # Przewiń produkt do widoku – wymusza załadowanie lazy-loaded elementów
                     driver.execute_script("arguments[0].scrollIntoView(true);", product)
-                    time.sleep(1)  # trochę czasu na załadowanie elementu
+                    time.sleep(1)
 
                     # Pobierz nazwę produktu (jeśli brak – prawdopodobnie to nie jest właściwy produkt)
                     product_name_elements = product.find_elements(By.CSS_SELECTOR, "h2.name a")
@@ -120,15 +115,15 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                             cala = product.find_element(By.XPATH, './/span[@class="whole"]').text.strip()
                             grosze = product.find_element(By.XPATH, './/span[@class="cents"]').text.strip()
                             waluta = product.find_element(By.XPATH, './/span[@class="currency"]').text.strip()
-                            price_text = f"{cala}.{grosze} {waluta}"
+                            price_text = f"{cala}.{grosze}{waluta}"
                         except:
-                            price_text = "Brak Danych"
-                            logger.info(f"Nie wykryto ceny: {title}")
+                            price_text = None
+                            logger.info("Nie wykryto ceny: {}",title)
 
 
                         return product_name, rating, reviews, price_text, product_link
                     except:
-                        logger.error(f"Problem z pobraniem")
+                        logger.error("Problem z pobraniem")
 
                 except StaleElementReferenceException:
                     if attempt < retries - 1:
@@ -152,23 +147,23 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                     continue
                 seen_products.add(product_name)
 
+                product_name = product_name.replace("\\","")
 
                 # Zapis do pliku CSV
                 writer.writerow({
                     "date": today_date,
-                    "title": product_name,
+                    "title": json.dumps(product_name, ensure_ascii=False),
                     "price": price_text,
                     "rating": rating,
                     "num_of_opinions": reviews,
                     "product_link": product_link
-                    # "tech_details": json.dumps(tech_details, ensure_ascii=False)
                 })
                 logger.info("Scraped: {}", product_name)
 
             except Exception as e:
                 logger.error("Błąd przy przetwarzaniu produktu: {}", e)
 
-                # Sprawdzenie, czy przycisk „nawiguj do następnej strony” jest dostępny
+        # Sprawdzenie, czy przycisk kolejnej strony jest dostępny
         try:
             number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
             # print(number)
@@ -177,7 +172,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                 logger.info("Ostatnia strona – zakończono scraping.")
                 break
         except Exception as e:
-            print("Błąd przy sprawdzaniu następnej strony:", e)
+            # print("Błąd przy sprawdzaniu następnej strony:", e)
             logger.error("Błąd przy sprawdzaniu następnej strony: {}",e)
             break
 
