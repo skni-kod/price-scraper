@@ -106,8 +106,6 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                     try:
                         # Pobranie tytułu oraz linku produktu
                         link_element = product.find_element(By.CSS_SELECTOR, 'h2.name a.ui-link')
-                        title = link_element.text
-                        title = title.replace("Smartfon", "").strip()
                         product_link = link_element.get_attribute("href")
 
                         # Pobranie ceny produktu
@@ -118,7 +116,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                             price_text = f"{cala}.{grosze}{waluta}"
                         except:
                             price_text = None
-                            logger.info("Nie wykryto ceny: {}",title)
+                            logger.info("Nie wykryto ceny: {}",product_name)
 
 
                         return product_name, rating, reviews, price_text, product_link
@@ -148,7 +146,8 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                 seen_products.add(product_name)
 
                 product_name = product_name.replace("\\","")
-
+                product_name = product_name.replace("Smartfon", "").strip()
+                product_name = product_name.replace("Telefon", "").strip()
                 # Zapis do pliku CSV
                 writer.writerow({
                     "date": today_date,
