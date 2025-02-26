@@ -13,7 +13,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 
 # Konfiguracja Firefoksa i Geckodrivera
-
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
@@ -21,15 +20,20 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
+# Konfiguracja folderu output
+output_folder = "output"
+os.makedirs(output_folder, exist_ok=True)
+
+# Ustawienia sklepu oraz bieżącej daty
+shop_name = "MediaExpert"
+today_date = datetime.now().strftime("%Y-%m-%d")
+csv_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.csv")
+log_filename = f"{shop_name}_{today_date}.log"
+
+
 # Definiujemy pola CSV
 fieldnames = ["date", "title", "price",  "rating", "num_of_opinions", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
-today_date = datetime.today().strftime("%Y-%m-%d")
 shop_name = "MediaExpert"
-
-os.makedirs("output", exist_ok = True)
-csv_filename = f"output/{shop_name}_{today_date}.csv"
-log_filename = f"output/{shop_name}_{today_date}.log"
-
 
 logger.remove()
 log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
@@ -153,8 +157,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                 # Zapis do pliku CSV
                 writer.writerow({
                     "date": today_date,
-                    "title": json.dumps(product_name, ensure_ascii=False),
-                    # "title": product_name,
+                    "title": product_name,
                     "price": price_text,
                     "rating": rating,
                     "num_of_opinions": reviews,
