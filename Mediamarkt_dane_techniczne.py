@@ -3,12 +3,12 @@ import os
 import glob
 from loguru import logger
 import json
-import time
+import random
 import csv
 from datetime import datetime
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
+from bs4 import BeautifulSoup
 
 # Konfiguracja Firefoksa i Geckodrivera
 # Dla osób z windowsem https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-win32.zip
@@ -18,7 +18,7 @@ output_folder = "output"
 os.makedirs(output_folder, exist_ok = True)
 
 # Ustawienia nazwy sklepu oraz daty
-shop_name = "morele"
+shop_name = "mediamarkt"
 today = datetime.now().strftime("%Y-%m-%d")
 csv_filename = os.path.join(output_folder, f"{shop_name}_{today}.csv")
 log_filename = os.path.join(output_folder, f"log_tech_details_{shop_name}_{today}.log")
@@ -68,39 +68,33 @@ service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
 options.add_argument("--headless")
 options.binary_location = firefox_binary_path
-driver = webdriver.Firefox(service=service, options=options)
+
+user_agents = [
+    # Tylko desktopowe User-Agenty:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+]
+
 
 def scrape_tech_details(url):
-    tech_details = {}
-    tech_details2 = {}
-    try:
-        driver.get(url)
-        # time.sleep(2) może się przyda, może nie
-        attributes_container = driver.find_element(By.CSS_SELECTOR, '#specification')
-        expert_recom = attributes_container.find_element(By.CSS_SELECTOR, 'div > div.product-specification__wrapper > div.expert-table.c-label-description--orange > ul')
-        data_phone = expert_recom.find_elements(By.XPATH, './/li')
+    user_agent = random.choice(user_agents)
+    options.set_preference("general.useragent.override", user_agent) #rotacja agentami musi być bo mediamarkt ma zabezpieczenia przed szybkim ładowaniem stron, więc albo 
+    #nowa sesja webdriver to zmienia albo losowy user-agent, któreś z tych, ale działa
 
+    # Inicjalizacja przeglądarki z nowym User-Agentem
+    driver = webdriver.Firefox(service=service, options=options)
+    driver.get(url)
+    tech_details = {}  
+    data_site = driver.page_source
+    soup = BeautifulSoup(data_site, "html.parser")
+    products_info = soup.find_all("td",{"class":"sc-27ebc524-0 iIdXkJ"})
+    products_info2 = soup.find_all("td",{"sc-27ebc524-0 ca-dqbf sc-35e02872-1 bbGRhm"})
+    for i in range(len(products_info)):
+        tech_details[products_info[i].text] = products_info2[i].text
 
-        tech_data = []
-        for i in data_phone:
-            tech_data.append(i.text.strip())
-
-        tech_details = {item.split("\n", 1)[0]: item.split("\n", 1)[1] for item in tech_data}
-        tech_data.clear()
-        
-        spec_table = attributes_container.find_element(By.CSS_SELECTOR,'div > div.product-specification__wrapper > div.product-specification__table')
-        data_phone = spec_table.find_elements(By.XPATH,'.//div[@class="group__specification"]')
-
-        for j in data_phone:
-            tech_data.append(j.text.strip())
-            
-        for item in tech_data:  # Iterujemy po elementach listy
-            text = item.split('\n')  # Rozdzielamy na klucze i wartości
-            for j in range(0, len(text) - 1, 2):  # Przechodzimy co dwa elementy
-                tech_details2[text[j]] = text[j + 1]  # Dodajemy do słownika
-        tech_details.update(tech_details2)
-    except Exception as e:
-            logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
+    driver.quit()
     return tech_details
 
 tech_csv_filename = os.path.join(output_folder, f"tech_details_{shop_name}_{today}.csv")
@@ -118,6 +112,6 @@ with open(tech_csv_filename, mode="w", newline="", encoding="utf-8") as tech_csv
             "tech_details": json.dumps(details, ensure_ascii=False)
         })
 
-driver.quit()
+
 logger.complete()
 logger.info("Zakończono pobieranie szczegółów technicznych. Dane zapisane w pliku: {}", tech_csv_filename)
