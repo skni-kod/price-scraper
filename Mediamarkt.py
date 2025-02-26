@@ -91,7 +91,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
             for product in products:
                 try:
-                    title = product.find("p", {"data-test": "product-title"}).text.strip().replace("Smartfon", "")
+                    title = product.find("p", {"data-test": "product-title"}).text.strip().replace("Smartfon", "")[1:] 
                 except:
                     title = ""
                     logger.info(f"Nie wykryto tytułu dla produktu na stronie {page}.")
