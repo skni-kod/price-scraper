@@ -1,3 +1,4 @@
+import os
 import re
 from loguru import logger
 import csv
@@ -22,10 +23,12 @@ driver = webdriver.Firefox(service=service, options=options)
 
 # Definiujemy pola CSV
 fieldnames = ["date", "title", "price",  "rating", "num_of_opinions", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
-today_date = datetime.today().strftime("%d-%m-%Y")
-shop_name = "mediaExpert"
-csv_filename = f"{shop_name}_{today_date}.csv"
-log_filename = f"{shop_name}_{today_date}.log"
+today_date = datetime.today().strftime("%Y-%m-%d")
+shop_name = "MediaExpert"
+
+os.makedirs("output", exist_ok = True)
+csv_filename = f"output/{shop_name}_{today_date}.csv"
+log_filename = f"output/{shop_name}_{today_date}.log"
 
 
 logger.remove()
@@ -118,7 +121,6 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                             price_text = None
                             logger.info("Nie wykryto ceny: {}",product_name)
 
-
                         return product_name, rating, reviews, price_text, product_link
                     except:
                         logger.error("Problem z pobraniem")
@@ -145,13 +147,14 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                     continue
                 seen_products.add(product_name)
 
-                product_name = product_name.replace("\\","")
-                product_name = product_name.replace("Smartfon", "").strip()
-                product_name = product_name.replace("Telefon", "").strip()
+                # Usuwanie NNBSP (Unicode U+202F) z ceny
+                price_text = price_text.replace("\u202F", "")
+
                 # Zapis do pliku CSV
                 writer.writerow({
                     "date": today_date,
                     "title": json.dumps(product_name, ensure_ascii=False),
+                    # "title": product_name,
                     "price": price_text,
                     "rating": rating,
                     "num_of_opinions": reviews,
@@ -167,11 +170,9 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
             # print(number)
             if int(number) <= page:
-                print("Ostatnia strona – zakończono scraping.")
                 logger.info("Ostatnia strona – zakończono scraping.")
                 break
         except Exception as e:
-            # print("Błąd przy sprawdzaniu następnej strony:", e)
             logger.error("Błąd przy sprawdzaniu następnej strony: {}",e)
             break
 
