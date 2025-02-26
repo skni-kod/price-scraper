@@ -1,16 +1,56 @@
-import re
-from loguru import logger
+import gc
+import os
 import csv
 import json
 import time
 import glob
 from datetime import datetime
 from selenium import webdriver
+from loguru import logger
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
+# Konfiguracja folderu output
+output_folder = "output"
+os.makedirs(output_folder, exist_ok=True)
+
+# Ustawienia sklepu oraz bieżącej daty
+shop_name = "MediaExpert"
+today_date = datetime.now().strftime("%Y-%m-%d")
+csv_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.csv")
+log_filename = os.path.join(output_folder, f"{shop_name}DaneTech_{today_date}.log")
+
+# Konfiguracja logowania za pomocą loguru
+logger.remove()
+log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
+logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
+logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
+
+logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
+logger.info("Plik CSV: {}", csv_filename)
+logger.info("Plik logu: {}", log_filename)
+
+# Wyszukanie najnowszego pliku CSV wygenerowanego przez pierwszy skrypt
+csv_pattern = os.path.join(output_folder, f"{shop_name}_*.csv")
+csv_files = glob.glob(csv_pattern)
+if not csv_files:
+    logger.error("Nie znaleziono plików CSV pasujących do wzorca {}", csv_pattern)
+    exit(1)
+
+# Ponieważ format nazwy pliku to mediaExpert_YYYY-MM-DD.csv, wystarczy wybrać najnowszy plik
+latest_csv_file = max(csv_files)
+logger.info("Wybrany plik CSV: {}", latest_csv_file)
+
+# Wczytanie linków produktów z CSV
+product_data = []
+with open(latest_csv_file, mode="r", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        if row.get("product_link"):
+            product_data.append({
+                "product_link": row["product_link"],
+            })
+logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
 
 # Konfiguracja Firefoksa i Geckodrivera
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
@@ -20,55 +60,25 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-# Definiujemy pola CSV
-fieldnames = ["product_link", "tech_info"]
-today_date = datetime.today().strftime("%d-%m-%Y")
-
-shop_name = "mediaExpert"
-log_filename = f"{shop_name}Tech_{today_date}.log"
-
-logger.remove()
-log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
-logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
-logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
-
-
-pliki = glob.glob("mediaExpert_*.csv")
-
-if not pliki:
-    logger.error("Nie znaleziono plików CSV pasujących do wzorca")
-    exit(1)
-
-def newfile(file):
-    data = file.split("_")[-1].replace(".csv", "")
-    return datetime.strptime(data, "%d-%m-%Y")
-
-input_file = max(pliki, key=newfile)
-output_file = f"medExpDaneTech_{today_date}.csv"
-
-logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
-logger.info("Plik CSV: {}", input_file)
-logger.info("Plik logu: {}", log_filename)
-
 def scrape_tech_details(url):
     tech_details = {}
     try:
         driver.get(url)
-        try:
-            # Czekamy aż produkty się załadują
-            wait = WebDriverWait(driver, 10)
-            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR,"table.list.attributes")))
-        except Exception as e:
-            logger.error(f"Błąd oczekiwania na produkty: {e}")
         time.sleep(2)
 
-        attributes_container = driver.find_element(By.CSS_SELECTOR,"table.list.attributes")
-        detail_elements = attributes_container.find_elements(By.CSS_SELECTOR, 'tbody tr.item')
+        table = driver.find_element(By.CSS_SELECTOR, 'table.list.attributes')
+        rows = table.find_elements(By.TAG_NAME, 'tr')
 
-        for element in detail_elements:
+        for row in rows:
             try:
-                key = element.find_element(By.CSS_SELECTOR, 'th.name.attribute span').text.replace(":", "").strip()
-                value = element.find_element(By.CSS_SELECTOR, 'td.values.attribute span').text.strip()
+                th_elements = row.find_elements(By.TAG_NAME, 'th')
+                td_elements = row.find_elements(By.TAG_NAME, 'td')
+                if not th_elements or not td_elements:
+                    continue
+                # Pobieramy nazwę atrybutu i usuwamy zbędne znaki
+                key = th_elements[0].text.replace(":", "").strip()
+                # Pobieramy wartość atrybutu
+                value = td_elements[0].text.strip()
                 tech_details[key] = value
             except Exception as inner_e:
                 logger.info("Błąd przy przetwarzaniu detalu: {}", inner_e)
@@ -76,32 +86,38 @@ def scrape_tech_details(url):
         logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
     return tech_details
 
-product_data = []
-with open(input_file, mode="r", encoding="utf-8") as csvfile:
-    reader = csv.DictReader(csvfile)
-    for row in reader:
-        if row.get("product_link"):
-            product_data.append({
-                "product_link": row["product_link"],
-            })
-logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
-# timer = 0
-with open(output_file, mode="w", newline="", encoding="utf-8") as output:
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
-    writer.writeheader()
-    for item in product_data:
-        # timer += 1
-        # if(timer % 15 == 0): time.sleep(10)
-        link = item["product_link"]
-        logger.info("Przetwarzanie: {}", link)
-        details = scrape_tech_details(link)
+# Przygotowanie pliku wynikowego z danymi technicznymi w folderze output
+tech_csv_filename = os.path.join(output_folder, f"{shop_name}DaneTech_{today_date}.csv")
+fieldnames = ["product_link", "tech_info"]
 
+# Liczba stron po których restartujemy driver
+restart_interval = 10
+
+with open(tech_csv_filename, mode="w", newline="", encoding="utf-8") as tech_csvfile:
+    writer = csv.DictWriter(tech_csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+    for i, item in enumerate(product_data, start=1):
+        url = item["product_link"]
+        logger.info("Przetwarzanie: {}", url)
+        details = scrape_tech_details(url)
+
+        # Zapis do pliku CSV
         writer.writerow({
-            "product_link": link,
+            "product_link": url,
             "tech_info": json.dumps(details, ensure_ascii=False)
         })
+
+        # Czyszczenie ciasteczek i wywołanie garbage collectora
+        driver.delete_all_cookies()
+        gc.collect()
+
+        # Restart driver co restart_interval stron
+        if i % restart_interval == 0:
+            logger.info("Restartowanie przeglądarki po {} stronach", i)
+            driver.quit()
+            driver = webdriver.Firefox(service=service, options=options)
 
 # Zamknięcie przeglądarki
 driver.quit()
 logger.complete()
-logger.info("Zakończono pobieranie szczegółów technicznych. Dane zapisane w pliku: {}", output_file)
+logger.info("Zakończono pobieranie szczegółów technicznych. Dane zapisane w pliku: {}", tech_csv_filename)
