@@ -13,11 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 
 # Konfiguracja Firefoksa i Geckodrivera
-firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
-service = Service("geckodriver.exe")
+service = Service("/usr/local/bin/geckodriver")
 options = webdriver.FirefoxOptions()
 options.add_argument("--headless")
-options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
 # Konfiguracja folderu output
@@ -28,7 +26,7 @@ os.makedirs(output_folder, exist_ok=True)
 shop_name = "MediaExpert"
 today_date = datetime.now().strftime("%Y-%m-%d")
 csv_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.csv")
-log_filename = f"{shop_name}_{today_date}.log"
+log_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.log")
 
 
 # Definiujemy pola CSV
