@@ -1,4 +1,5 @@
 import re
+import os
 from loguru import logger
 import csv
 import json
@@ -11,6 +12,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
+#Tworzenie folderu output jeśli nie istnieje
+os.makedirs("output", exist_ok=True)
+
+# Ustawienia nazwy sklepu oraz daty
+SHOP_NAME = "RTV-EURO-AGD"
+fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
+today_date = datetime.now().strftime("%Y-%m-%d")
+csv_filename  = f"output/{SHOP_NAME}_{today_date}.csv"
+log_filename = f"output/log_{SHOP_NAME}_{today_date}.log"
+
+# Konfiguracja logowania przy użyciu loguru:
+logger.remove()
+log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
+logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
+logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
+
+# Konfiguracja Firefoksa i Geckodrivera
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
@@ -18,14 +36,11 @@ options.add_argument("--headless")
 options.binary_location = firefox_binary_path
 driver = webdriver.Firefox(service=service, options=options)
 
-SHOP_NAME = "RTV-EURO-AGD"
-fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
-today_date = datetime.today().strftime("%d-%m-%Y")
-output_file = f"{SHOP_NAME}_{today_date}.csv"
+logger.info("Rozpoczęto scraping.")
+logger.info("Plik CSV: {}", csv_filename)
+logger.info("Plik logu: {}", log_filename)
 
-logger.add(f"log_{SHOP_NAME}_{today_date}.log", rotation="10 MB", level="INFO", encoding="utf-8")
-
-with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
+with open(csv_filename , mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -75,7 +90,7 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
                     rating = "{}/5".format(product.find_element(By.XPATH, './/span[@class="client-rate__rate"]').text)
                     num_of_opinions = product.find_element(By.XPATH, './/span[@class="client-rate__opinions"]').text.split()[0]
                 except Exception as e:
-                        logger.warning(f"Brak oceny lub opinii dla produktu {title}: {e}")
+                        logger.warning(f"Brak oceny lub opinii dla produktu: {title}")
                         rating = "Brak opinii"
                         num_of_opinions = "Brak opinii"
 
@@ -120,4 +135,4 @@ with open(output_file, mode="w", newline="", encoding="utf-8") as csvfile:
             break
 
 driver.quit()
-logger.info(f"Zakończono scraping. Dane zapisane w pliku: {output_file}")
+logger.info(f"Zakończono scraping. Dane zapisane w pliku: {csv_filename }")
