@@ -1,7 +1,5 @@
-import time
 import os
 import csv
-import random
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -10,6 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from loguru import logger
+import json
 
 # Tworzenie folderu output
 os.makedirs("output", exist_ok=True)
@@ -29,15 +28,6 @@ logger.info("Rozpoczęto scraping.")
 logger.info("Plik CSV: {}", csv_filename)
 logger.info("Plik logu: {}", log_filename)
 
-# Lista User-Agentów
-user_agents = [
-    # Tylko desktopowe User-Agenty:
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-]
-
 # Konfiguracja przeglądarki Firefox
 firefox_binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 service = Service("geckodriver.exe")
@@ -55,91 +45,58 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
     page = 1
     while True:
-        # Wybierz losowy User-Agent
-        
-        user_agent = random.choice(user_agents)
-        options.set_preference("general.useragent.override", user_agent) #rotacja agentami musi być bo mediamarkt ma zabezpieczenia przed szybkim ładowaniem stron, więc albo 
-        #nowa sesja webdriver to zmienia albo losowy user-agent, któreś z tych, ale działa
-
-        # Inicjalizacja przeglądarki z nowym User-Agentem
+        # Inicjalizacja nowego webdrivera za każdym razem, bo driver.get(url) nie działa bo mediamarkt ma captche
         driver = webdriver.Firefox(service=service, options=options)
 
         url = f"https://mediamarkt.pl/pl/category/smartfony-25983.html?page={page}"
-        logger.info(f"Przetwarzanie strony: {url} z User-Agent: {user_agent}")
+        logger.info(f"Przetwarzanie strony: {url}")
 
         # Otwórz stronę
         driver.get(url)
-        driver.execute_script("document.body.style.transform = 'scale(0.3)'") #jak ktoś to usunie to zamiast 12 produktów będzie pokazywać 9, scrollowanie przez strone nie działa
-
+        driver.execute_script("document.body.style.transform = 'scale(0.3)'")
         try:
+            # Czekaj na załadowanie produktów
             WebDriverWait(driver, 15).until(
                 EC.presence_of_all_elements_located((By.XPATH, '//div[@data-test="mms-product-card"]'))
             )
 
             page_source = driver.page_source
             soup = BeautifulSoup(page_source, "html.parser")
+            json_scripts = soup.find_all('script', type='application/ld+json')
 
-   
-            products = soup.find_all("div", {"data-test": "mms-product-card"})
-            logger.info(f"Znaleziono {len(products)} produktów na stronie {page}.")
-
-            # Jeśli nie ma produktów, zakończ pętlę
-            if not products:
-                logger.info("Brak produktów na stronie. Kończenie scrapowania.")
-                driver.quit() 
-                break
-
-            for product in products:
+            for script in json_scripts:
                 try:
-                    title = product.find("p", {"data-test": "product-title"}).text.strip().replace("Smartfon", "")[1:] 
-                except:
-                    title = ""
-                    logger.info(f"Nie wykryto tytułu dla produktu na stronie {page}.")
-
-                try:
-                    price = product.find("span", {"class": "sc-e0c7d9f7-0 bPkjPs"}).text.strip()
-                except:
-                    price = 0
-                    logger.info(f"Nie wykryto ceny dla: {title}")
-
-                try:
-                    link_element = product.find("a", {"data-test": "mms-router-link-product-list-item-link"})
-                    full_link = f"https://mediamarkt.pl{link_element.get('href')}" if link_element else "Brak linku"
-                except:
-                    full_link = "Brak linku"
-                    logger.info(f"Nie wykryto linku dla: {title}")
-
-                try:
-                    num_of_opinions = product.find("span", {"data-test": "mms-customer-rating-count"}).text
-                except:
-                    num_of_opinions = 0
-                    logger.info(f"Nie wykryto liczby opinii dla: {title}")
-
-                try:
-                    rating = product.find("div", {"data-test": "mms-customer-rating"}).get("aria-label")
-                    rating_value = rating.split(":")[1].split()[0] if rating else 0
-                except:
-                    rating_value = 0
-                    logger.info(f"Nie wykryto oceny dla: {title}")
-
-                # Zapisz dane do pliku CSV
-                writer.writerow({
-                    "title": title,
-                    "product_link": full_link,
-                    "price": price,
-                    "num_of_opinions": num_of_opinions,
-                    "rating": rating_value,
-                })
-                logger.info(f"Zapisano produkt: {title}")
-
-            # Przejdź do następnej strony
-
+                    json_data = json.loads(script.string)
+                    
+                    if json_data.get('@type') == 'ItemList':
+                        for item in json_data.get('itemListElement', []):
+                            product = item.get('item', {})
+                            
+                            # Odczytanie danych
+                            name = product.get('name').replace("Smartfon ", "")
+                            price = product.get('offers', {}).get('price')
+                            rating_value = product.get('aggregateRating', {}).get('ratingValue')
+                            review_count = product.get('aggregateRating', {}).get('reviewCount')
+                            url = product.get('url')
+                            
+                            writer.writerow({
+                                "title": name,
+                                "product_link": url,
+                                "price": price,
+                                "num_of_opinions": review_count,
+                                "rating": rating_value,
+                            })
+                            logger.info(f"Zapisano produkt: {name}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Błąd podczas parsowania JSON: {e}")
+                    continue
+            driver.quit()
             page += 1
-        except:
-            break
 
-        # Zamknij przeglądarkę przed przejściem do następnej strony
-        driver.quit()
+        except Exception as e:
+            logger.error(f"Błąd podczas przetwarzania strony {page}: {e}")
+            driver.quit()
+            break
 
 # Zamknij przeglądarkę po zakończeniu
 logger.info("Zakończono scraping.")
