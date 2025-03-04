@@ -24,7 +24,7 @@ SHOP_NAME = "rtv_euro_agd"
 fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
 today_date = datetime.now().strftime("%Y-%m-%d")
 csv_filename  = f"output/{SHOP_NAME}_{today_date}.csv"
-log_filename = f"output/log_{SHOP_NAME}_{today_date}.log"
+log_filename = f"output/tech_details_log_{SHOP_NAME}_{today_date}.log"
 
 # Konfiguracja logowania przy użyciu loguru:
 logger.remove()
@@ -38,12 +38,12 @@ options = webdriver.FirefoxOptions()
 options.binary_location = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 options.add_argument("--headless")
 
+logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
+logger.info("Plik CSV: {}", csv_filename)
+logger.info("Plik logu: {}", log_filename)
+
 try:
     driver = webdriver.Firefox(service=service, options=options)
-
-    logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
-    logger.info("Plik CSV: {}", csv_filename)
-    logger.info("Plik logu: {}", log_filename)
 
     csv_pattern = os.path.join(output_folder, f"{SHOP_NAME}_*.csv")
     csv_files = glob.glob(csv_pattern)
@@ -124,11 +124,20 @@ try:
                             if tr_element.find_elements(By.TAG_NAME, 'a'):
                                 logger.info(f"Pominięto element '{key}', ponieważ zawiera link.")
                                 continue
-                            key = tr_element.find_element(By.TAG_NAME, 'th').text.replace(":","")
-                            value = tr_element.find_element(By.TAG_NAME, 'span').text.strip()
-                            tech_details[key] = value
+                            try:
+                                key_element = tr_element.find_elements(By.TAG_NAME, 'th')
+                                value_element = tr_element.find_elements(By.TAG_NAME, 'span')
+
+                                if key_element and value_element:
+                                    key = key_element[0].text.replace(":", "").strip()
+                                    value = value_element[0].text.strip()
+                                    tech_details[key] = value
+                                else:
+                                    logger.warning("Pominięto wiersz, ponieważ brakuje 'th' lub 'span'.")
+                            except Exception as inner_e:
+                                logger.warning("Błąd przy przetwarzaniu detalu: {}", inner_e)
                 except Exception as inner_e:
-                    logger.info("Błąd przy przetwarzaniu detalu: {}", inner_e)
+                    logger.warning("Błąd przy przetwarzaniu detalu: {}", inner_e)
         except Exception as e:
             logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
         return tech_details        
@@ -137,7 +146,7 @@ try:
     tech_csv_filename = os.path.join(output_folder, f"tech_details_{SHOP_NAME}_{today_date}.csv")
     fieldnames = ["product_link", "tech_details"]
 
-    with open(tech_csv_filename, mode="w", newline="", encoding="utf-8") as tech_csvfile:
+    with open(tech_csv_filename, mode="a", newline="", encoding="utf-8") as tech_csvfile:
         writer = csv.DictWriter(tech_csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for item in product_data:
