@@ -60,7 +60,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             products = soup.find_all(class_='left')
 
             for product in products:
-                avibility = False
+                availability = False
                 price_text = "0"
                 product_info = product.find_next_sibling(class_="right")
                 try:
@@ -75,7 +75,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
                     # Pobranie ceny produktu
                     else:
-                        avibility = True
+                        availability = True
                         try:
                             price_element = product_info.find(class_="priceCurrent")
                             if price_element and price_element.contents:
@@ -89,7 +89,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                         "date": today_date,
                         "price": price_text,
                         "product_link": shop_url + product_link,
-                        "availability": avibility
+                        "availability": availability
                     })
                     logger.info(f"  Scraped: {title}")
                 except Exception as e:

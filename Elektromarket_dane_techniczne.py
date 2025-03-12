@@ -28,8 +28,6 @@ logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
 logger.info("Plik CSV: {}", csv_filename)
 logger.info("Plik logu: {}", log_filename)
 
-# Definiujemy pola CSV
-fieldnames = ["date", "title", "price", "product_link"]
 
 # Wyszukanie najnowszego pliku CSV wygenerowanego przez pierwszy skrypt
 csv_pattern = os.path.join(output_folder, f"{shop_name}_*.csv")
@@ -40,7 +38,6 @@ if not csv_files:
 
 def extract_date(filename):
     base = os.path.basename(filename)
-    # Zakładamy, że nazwa pliku ma format: komputronik_YYYY-MM-DD.csv
     date_str = base.replace(f"{shop_name}_", "").replace(".csv", "")
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
@@ -97,10 +94,6 @@ def scrape_tech_details(url):
                         else:
                             logger.warning("Błąd podczas odczytywania parametrów, niepoprawna ilość kolumn: {}", url)
 
-        if not product_details_table:
-            logger.warning("Nie znaleziono tabel atrybutów dla URL: {}", url)
-            return tech_details
-
     except Exception as e:
         logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
     return tech_details
@@ -108,10 +101,10 @@ def scrape_tech_details(url):
 
 # Przygotowanie pliku wynikowego z danymi technicznymi w folderze output
 tech_csv_filename = os.path.join(output_folder, f"tech_details_{shop_name}_{today_date}.csv")
-fieldnames = ["product_link", "tech_details"]
+output_fieldnames = ["product_link", "tech_details"]
 
 with open(tech_csv_filename, mode="w", newline="", encoding="utf-8") as tech_csvfile:
-    writer = csv.DictWriter(tech_csvfile, fieldnames=fieldnames)
+    writer = csv.DictWriter(tech_csvfile, fieldnames=output_fieldnames)
     writer.writeheader()
     for item in product_data:
         url = item["product_link"]
