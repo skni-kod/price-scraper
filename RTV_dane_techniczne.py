@@ -35,6 +35,8 @@ logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
 # Konfiguracja Firefoksa i Geckodrivera
 service = Service("geckodriver.exe")
 options = webdriver.FirefoxOptions()
+options.set_preference("general.useragent.override", 
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/109.0")
 options.binary_location = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
 options.add_argument("--headless")
 
@@ -146,7 +148,8 @@ try:
     tech_csv_filename = os.path.join(output_folder, f"tech_details_{SHOP_NAME}_{today_date}.csv")
     fieldnames = ["product_link", "tech_details"]
 
-    with open(tech_csv_filename, mode="a", newline="", encoding="utf-8") as tech_csvfile:
+
+    with open(tech_csv_filename, mode="w", newline="", encoding="utf-8") as tech_csvfile:
         writer = csv.DictWriter(tech_csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for item in product_data:

@@ -46,7 +46,7 @@ logger.info("Plik logu: {}", log_filename)
 try:
     driver = webdriver.Firefox(service=service, options=options)
 
-    with open(csv_filename , mode="a", newline="", encoding="utf-8") as csvfile:
+    with open(csv_filename , mode="w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -99,20 +99,6 @@ try:
                             logger.warning(f"Brak oceny lub opinii dla produktu: {title}")
                             rating = "Brak opinii"
                             num_of_opinions = "Brak opinii"
-
-                    # Pobieranie danych technicznych
-                    tech_details = {}
-                    try:
-                        technical_data_div = product.find_element(By.XPATH, './/div[@class="technical-data"]')
-                        technical_data_items = technical_data_div.find_elements(By.XPATH, './/li[@class="technical-data__list-item"]')
-
-                        for data_item in technical_data_items:
-                            data_item_key = data_item.find_element(By.XPATH, './/span[@class="technical-data__list-item-name"]').text.strip().replace(":", "")
-                            data_item_value = data_item.find_element(By.XPATH, './/span[@class="technical-data-item-text"]').text.strip()
-                            tech_details[data_item_key] = data_item_value
-
-                    except Exception as e:
-                        logger.error(f"Błąd przy pobieraniu szczegółów technicznych dla {title}: {e}")
                     
                     # Zapis do pliku CSV
                     writer.writerow({
@@ -122,7 +108,6 @@ try:
                         "product_link": product_link,
                         "rating": rating,
                         "num_of_opinions": num_of_opinions,
-                        "tech_details": json.dumps(tech_details, ensure_ascii=False)
                     })
                     logger.info(f"Scraped: {title}")
                     
