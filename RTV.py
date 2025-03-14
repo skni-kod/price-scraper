@@ -1,10 +1,6 @@
-import glob
 import os
-import re
 import csv
-import json
 from datetime import datetime
-import time
 
 from loguru import logger
 
@@ -21,7 +17,7 @@ os.makedirs(output_folder, exist_ok=True)
 
 # Ustawienia nazwy sklepu oraz daty
 SHOP_NAME = "rtv_euro_agd"
-fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
+fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions"]
 today_date = datetime.now().strftime("%Y-%m-%d")
 csv_filename  = f"output/{SHOP_NAME}_{today_date}.csv"
 log_filename = f"output/log_{SHOP_NAME}_{today_date}.log"
@@ -43,9 +39,9 @@ logger.info("Rozpoczęto scraping.")
 logger.info("Plik CSV: {}", csv_filename)
 logger.info("Plik logu: {}", log_filename)
 
-try:
-    driver = webdriver.Firefox(service=service, options=options)
+driver = webdriver.Firefox(service=service, options=options)
 
+try:
     with open(csv_filename , mode="w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()

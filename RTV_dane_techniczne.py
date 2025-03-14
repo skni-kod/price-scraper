@@ -1,6 +1,5 @@
 import glob
 import os
-import re
 import csv
 import json
 from datetime import datetime
@@ -21,7 +20,6 @@ os.makedirs(output_folder, exist_ok=True)
 
 # Ustawienia nazwy sklepu oraz daty
 SHOP_NAME = "rtv_euro_agd"
-fieldnames = ["title", "date", "price", "product_link", "rating", "num_of_opinions", "tech_details"]
 today_date = datetime.now().strftime("%Y-%m-%d")
 csv_filename  = f"output/{SHOP_NAME}_{today_date}.csv"
 log_filename = f"output/tech_details_log_{SHOP_NAME}_{today_date}.log"
@@ -44,9 +42,9 @@ logger.info("Rozpoczęcie skryptu pobierania szczegółów technicznych.")
 logger.info("Plik CSV: {}", csv_filename)
 logger.info("Plik logu: {}", log_filename)
 
-try:
-    driver = webdriver.Firefox(service=service, options=options)
+driver = webdriver.Firefox(service=service, options=options)
 
+try:
     csv_pattern = os.path.join(output_folder, f"{SHOP_NAME}_*.csv")
     csv_files = glob.glob(csv_pattern)
     if not csv_files:
@@ -91,7 +89,16 @@ try:
         Funkcja otwiera stronę produktu i próbuje pobrać wszystkie detale techniczne.
         """
         driver.get(url)
-        time.sleep(3)
+        
+        #Oczekiwanie na pojawienie się diva "technical-attributes" co oznacza załądowanie się strony
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, '//div[@class="technical-attributes"]'))
+            )
+        except TimeoutException:
+            logger.error("Strona nie załadowała się w ciągu 10 sekund.")
+            return {}
+
         tech_details = {}
         try:
             #Zamknięcie banera z cookies który zasłania przycisk "Rozwiń pełne dane techniczne"
@@ -106,7 +113,10 @@ try:
 
             # Sprawdzenie, czy przycisk "Rozwiń pełne dane techniczne" jest obecny, a jeśli tak, kliknięcie w niego
             try:
-                show_more_button = WebDriverWait(driver, 2).until(
+                WebDriverWait(driver, 10).until(
+                    EC.invisibility_of_element_located((By.CLASS_NAME, "onetrust-pc-dark-filter"))
+                )
+                show_more_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, '//button[contains(@class, "cta") and .//span[contains(text(), "Rozwiń pełne dane techniczne")]]'))
                 )
                 driver.execute_script("arguments[0].scrollIntoView();", show_more_button)  # Przewinięcie do przycisku
