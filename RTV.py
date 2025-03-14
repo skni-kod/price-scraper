@@ -115,7 +115,7 @@ try:
                 next_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, '//a[@data-aut-id="show-more-products-button"]'))
                 )
-                logger.info("Przechodzę na następną stronę...")
+                logger.info("Przechodzę na następną stronę....")
                 page += 1
             except Exception:
                 logger.info("Brak przycisku 'Załaduj więcej' – zakończono scraping.")

@@ -101,9 +101,15 @@ try:
 
         tech_details = {}
         try:
+            
+            WebDriverWait(driver, 10).until(
+                EC.invisibility_of_element_located((By.CLASS_NAME, "onetrust-pc-dark-filter"))
+            )
+
             #Zamknięcie banera z cookies który zasłania przycisk "Rozwiń pełne dane techniczne"
+            time.sleep(3)
             try:
-                cookie_button = WebDriverWait(driver, 2).until(
+                cookie_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, '//button[contains(@id, "onetrust-accept-btn-handler")]'))
                 )
                 cookie_button.click()
@@ -124,7 +130,7 @@ try:
             except TimeoutException:
                 logger.warning("Nie znaleziono przycisku 'Rozwiń pełne dane techniczne', kontynuujemy bez klikania")
     
-            time.sleep(2)  # krótkie oczekiwanie na załadowanie strony
+            time.sleep(4)  # krótkie oczekiwanie na załadowanie strony
             attributes_container = driver.find_element(By.XPATH, '//div[@class="technical-attributes"]')
             detail_elements = attributes_container.find_elements(By.XPATH, './/div[@class="technical-attributes__section"]')
             for element in detail_elements:
