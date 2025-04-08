@@ -52,7 +52,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
         driver.execute_script("document.body.style.transform = 'scale(0.3)'")
         WebDriverWait(driver, 15).until(
         EC.presence_of_all_elements_located((By.XPATH, '//div[@class="cat-product card"]//img[contains(@class, "product-image")]')))
-        time.sleep(2)
+        # time.sleep(2)
         products = driver.find_elements(By.XPATH,
                                         '//div[@class="cat-product card"]')
 
@@ -109,7 +109,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             except Exception as e:
                 logger.error(f"Error processing product:: {str(e)}")
     
-        # Sprawdzenie, czy przycisk „nawiguj do następnej strony” jest dostępny
+        # Check if the “navigate to next page” button is available.
         try:
             next_arrow = driver.find_elements(By.XPATH, '//a[@class="pagination-btn" and i[@class="icon-arrow-right"]]')
 
