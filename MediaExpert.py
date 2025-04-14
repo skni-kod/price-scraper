@@ -1,47 +1,28 @@
-import os
-import re
 from loguru import logger
 import csv
-import json
 import time
-from datetime import datetime
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
+from config import (driver, date, setup_logging)
 
-# Konfiguracja Firefoksa i Geckodrivera
-service = Service("/usr/local/bin/geckodriver")
-options = webdriver.FirefoxOptions()
-options.add_argument("--headless")
-driver = webdriver.Firefox(service=service, options=options)
-
-# Konfiguracja folderu output
-output_folder = "output"
-os.makedirs(output_folder, exist_ok=True)
-
-# Ustawienia sklepu oraz bieżącej daty
-shop_name = "MediaExpert"
-today_date = datetime.now().strftime("%Y-%m-%d")
-csv_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.csv")
-log_filename = os.path.join(output_folder, f"{shop_name}_{today_date}.log")
-
-
-# Definiujemy pola CSV
-fieldnames = ["date", "title", "price",  "rating", "num_of_opinions", "product_link"] #Fajnie by było znać datę kiedy jaka cena występowała
+# Settings of the shop
 shop_name = "MediaExpert"
 
-logger.remove()
-log_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {level} - {message}"
-logger.add(log_filename, level="INFO", format="{time} - {level} - {message}", encoding="utf-8")
-logger.add(lambda msg: print(msg, end=""), level="INFO", format=log_format)
+# Define CSV columns
+fieldnames = ["date", "title", "product_link", "price", "image_url", "rating", "num_of_opinions"]
 
-logger.info("Rozpoczęto scraping.")
-logger.info("Plik CSV: {}", csv_filename)
-logger.info("Plik logu: {}", log_filename)
+# Definition of file names
+csv_filename = f"output/{shop_name}_{date}.csv"
+log_filename = f"output/log_{shop_name}_{date}.log"
 
+
+# Configuration of logger
+logger = setup_logging(log_filename)
+logger.info("Beggining of scrapping.")
+logger.info("CSV file: {}", csv_filename)
+logger.info("Log file: {}", log_filename)
 
 with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -49,7 +30,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
     page = 1
     while True:
-        # Ustalanie URL: dla pierwszej strony używamy podstawowego adresu, a kolejne strony mają parametr ?p=
+        # Set of URL: we'll use first page for basic address, another ones with have "p="
         if page == 1:
             url = "https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony"
         else:
@@ -59,80 +40,89 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
         driver.get(url)
 
         try:
-            # Czekamy aż produkty się załadują
+            # We're waiting for the goods to load
             wait = WebDriverWait(driver, 10)
             wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.offer-box")))
         except Exception as e:
-            logger.error("Błąd oczekiwania na produkty: {}",e)
+            logger.error("Error while awaiting for the goods: {}", e)
             break
         # time.sleep(1)
 
         products = driver.find_elements(By.CSS_SELECTOR, "div.offer-box")
         products_count = len(products)
-        logger.info("Znaleziono {} produktów.", products_count)
+        logger.info("Found {} products.", products_count)
 
         if not products:
-            logger.info("Brak produktów na stronie, kończę scraping.")
+            logger.info("No goods were found on this page, end of scrapping.")
             break
+
 
         def process_product(index, retries=3):
             for attempt in range(retries):
                 try:
-                    # Pobierz aktualną listę produktów, aby nie operować na "starych" referencjach
+                    # Download current list of goods, to avoid operating on old references
                     products = driver.find_elements(By.CSS_SELECTOR, "div.offer-box")
                     product = products[index]
 
-                    # Przewiń produkt do widoku – wymusza załadowanie lazy-loaded elementów
+                    # Scroll to product's view - it forces load of lazy-loaded
                     driver.execute_script("arguments[0].scrollIntoView(true);", product)
                     time.sleep(1)
 
-                    # Pobierz nazwę produktu (jeśli brak – prawdopodobnie to nie jest właściwy produkt)
+                    # Download product's name (if there are none - we probably have a wrong product)
                     product_name_elements = product.find_elements(By.CSS_SELECTOR, "h2.name a")
                     if not product_name_elements:
                         return None
                     product_name = product_name_elements[0].text.strip()
 
-                    # Pobierz ocenę, uwzględniając pełne oraz połowkowe gwiazdki
+                    # Download of product's image URL
+                    try:
+                        image_link = product.find_element(By.CSS_SELECTOR, 'div.picture-image img.is-loaded')
+                        image = image_link.get_attribute("src")
+                    except:
+                        logger.error("Couldn't download the image URL")
+                        image = None
+
+                    # Download opinions, thinking about half and full stars
                     try:
                         rating_element = product.find_element(By.CSS_SELECTOR, "div.product-rating")
-                        # Pełne gwiazdki (np. <i class="icon-star01 is-filled">)
+                        # Full stars (eg. <i class="icon-star01 is-filled">)
                         full_stars = rating_element.find_elements(By.CSS_SELECTOR, "i.icon-star01.is-filled")
-                        # Połowkowe gwiazdki (np. <svg class="is-half-filled">)
+                        # Half-stars (eg. <svg class="is-half-filled">)
                         half_stars = rating_element.find_elements(By.CSS_SELECTOR, "svg.is-half-filled")
                         rating = len(full_stars) + 0.5 * len(half_stars)
-                        # Pobierz liczbę opinii
+                        # Download numer of opinions
                         reviews_elements = rating_element.find_elements(By.CSS_SELECTOR, "span.count-number")
                         reviews = reviews_elements[0].text.strip() if reviews_elements else "0"
                     except Exception:
                         rating = None
                         reviews = None
-                        logger.info("Brak opinii dla produktu '{}'.", product_name)
+                        logger.info("No reviews for product '{}'", product_name)
 
                     try:
-                        # Pobranie tytułu oraz linku produktu
+                        # Title and link download
                         link_element = product.find_element(By.CSS_SELECTOR, 'h2.name a.ui-link')
                         product_link = link_element.get_attribute("href")
 
-                        # Pobranie ceny produktu
+                        # Download of price
                         try:
-                            cala = product.find_element(By.XPATH, './/span[@class="whole"]').text.strip()
-                            grosze = product.find_element(By.XPATH, './/span[@class="cents"]').text.strip()
-                            waluta = product.find_element(By.XPATH, './/span[@class="currency"]').text.strip()
-                            price_text = f"{cala}.{grosze}{waluta}"
+                            whole = product.find_element(By.XPATH, './/span[@class="whole"]').text.strip()
+                            cents = product.find_element(By.XPATH, './/span[@class="cents"]').text.strip()
+                            currency = product.find_element(By.XPATH, './/span[@class="currency"]').text.strip()
+                            price_text = f"{whole}.{cents}{currency}"
                         except:
                             price_text = None
-                            logger.info("Nie wykryto ceny: {}",product_name)
-
-                        return product_name, rating, reviews, price_text, product_link
+                            logger.info("No price was found for {}", product_name)
+                        return image, product_name, rating, reviews, price_text, product_link
                     except:
-                        logger.error("Problem z pobraniem")
+                        logger.error("Issues with data scrapping")
 
                 except StaleElementReferenceException:
                     if attempt < retries - 1:
                         # time.sleep(1)
-                        continue  # ponów próbę
+                        continue  # Try again
                     else:
                         raise
+
 
         seen_products = set()
 
@@ -140,45 +130,46 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             try:
                 result = process_product(i)
                 if result is None:
-                    continue  # pomijamy elementy, które nie zawierają danych produktu
-                product_name, rating, reviews, price_text, product_link = result
+                    continue  # We skip element if it doesn't have any data
+                image, product_name, rating, reviews, price_text, product_link = result
 
-                # Sprawdzanie duplikatów
+                # Checking for copies
                 if product_name in seen_products:
-                    logger.info("Produkt '{}' został już przetworzony, pomijam duplikat.", product_name)
+                    logger.info("Product '{}' was already scrapped, skipping it's copy", product_name)
                     continue
                 seen_products.add(product_name)
 
-                # Usuwanie NNBSP (Unicode U+202F) z ceny
+                # Deleting NNBSP (Unicode U+202F) from pridce
                 price_text = price_text.replace("\u202F", "")
 
-                # Zapis do pliku CSV
+                # Saving to SCV file
                 writer.writerow({
-                    "date": today_date,
+                    "date": date,
                     "title": product_name,
                     "price": price_text,
                     "rating": rating,
                     "num_of_opinions": reviews,
-                    "product_link": product_link
+                    "product_link": product_link,
+                    "image_url": image
                 })
                 logger.info("Scraped: {}", product_name)
 
             except Exception as e:
-                logger.error("Błąd przy przetwarzaniu produktu: {}", e)
+                logger.error("Error while scrapping product: {}", e)
 
-        # Sprawdzenie, czy przycisk kolejnej strony jest dostępny
+        # Checking, if there another page's button is available
         try:
             number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
             # print(number)
             if int(number) <= page:
-                logger.info("Ostatnia strona – zakończono scraping.")
+                logger.info("Last page - end of scrapping.")
                 break
         except Exception as e:
-            logger.error("Błąd przy sprawdzaniu następnej strony: {}",e)
+            logger.error("Error while checking for next page: {}", e)
             break
 
         page += 1
 
 driver.quit()
 logger.complete()
-logger.info(f"Zakończono scraping. Dane zapisane w pliku: {csv_filename}")
+logger.info(f"End of scrapping. Collected data saved to file: {csv_filename}")
