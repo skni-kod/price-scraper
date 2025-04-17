@@ -35,7 +35,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             url = "https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony"
         else:
             url = f"https://www.mediaexpert.pl/smartfony-i-zegarki/smartfony?page={page}"
-        logger.info("Scraping strony {}: {}", page, url)
+        logger.info("Scraping of page {}: {}", page, url)
 
         driver.get(url)
 
@@ -53,7 +53,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
         logger.info("Found {} products.", products_count)
 
         if not products:
-            logger.info("No goods were found on this page, end of scrapping.")
+            logger.info("No products were found on this page, end of scrapping.")
             break
 
 
@@ -142,7 +142,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                 # Deleting NNBSP (Unicode U+202F) from pridce
                 price_text = price_text.replace("\u202F", "")
 
-                # Saving to SCV file
+                # Saving to CSV file
                 writer.writerow({
                     "date": date,
                     "title": product_name,
@@ -157,7 +157,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             except Exception as e:
                 logger.error("Error while scrapping product: {}", e)
 
-        # Checking, if there another page's button is available
+        # Checking, if another page button is available
         try:
             number = driver.find_element(By.XPATH, '//div[@class="lastpage-button"]').text
             # print(number)

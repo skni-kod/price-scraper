@@ -26,7 +26,7 @@ logger.info("Log file: {}", log_filename)
 csv_pattern = os.path.join(output_folder, f"{shop_name}_*.csv")
 csv_files = glob.glob(csv_pattern)
 if not csv_files:
-    logger.error("No SCV file that matches template was found {}", csv_pattern)
+    logger.error("No CSV file that matches template was found {}", csv_pattern)
     exit(1)
 
 # Because file format was mediaExpert_YYYY-MM-DD.csv, we only need to select newest
