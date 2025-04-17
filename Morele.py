@@ -1,6 +1,5 @@
 from config import(driver, date, setup_logging)
 import re
-import time
 import csv
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -46,7 +45,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
             url = "https://www.morele.net/kategoria/smartfony-280/"
         else:
             url = f"https://www.morele.net/kategoria/smartfony-280/,,,,,,,,0,,,,/{page}/"
-        print(f"Scraping strony {page}: {url}")
+        logger.info(f"Scraping site {page}: {url}")
 
         driver.get(url)
         driver.execute_script("document.body.style.transform = 'scale(0.3)'")
@@ -57,7 +56,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
                                         '//div[@class="cat-product card"]')
 
         if not products:
-            logger.info("Brak produktów na stronie, kończę scraping.")
+            logger.info("No products found, terminating script")
             break
 
        # Iterating through the products on the page

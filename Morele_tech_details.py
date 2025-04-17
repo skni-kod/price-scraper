@@ -90,7 +90,7 @@ def scrape_tech_details(url):
                 tech_details2[text[j]] = text[j + 1]  
         tech_details.update(tech_details2)
     except Exception as e:
-            logger.error("Błąd przy otwieraniu URL {}: {}", url, e)
+            logger.error("Error while opening URL {}: {}", url, e)
     return tech_details
 
 tech_csv_filename = os.path.join(output_folder, f"tech_details_{shop_name}_{date}.csv")
