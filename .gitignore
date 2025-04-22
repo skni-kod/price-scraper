@@ -4,3 +4,4 @@
 *.idea
 *.log
 geckodriver.exe
+__pycache__/
