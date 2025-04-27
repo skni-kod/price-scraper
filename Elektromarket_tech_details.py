@@ -58,7 +58,7 @@ with open(latest_csv_file, mode="r", encoding="utf-8") as f:
             product_data.append({
                 "product_link": row["product_link"],
             })
-logger.info("Znaleziono {} produktów do przetworzenia.", len(product_data))
+logger.info("Found {} products to process.", len(product_data))
 
 def scrape_tech_details(url):
     """

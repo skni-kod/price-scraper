@@ -1,7 +1,7 @@
 import csv
 import requests
 from bs4 import BeautifulSoup
-from config import (driver, date, setup_logging)
+from config import (date, setup_logging)
 
 # Define shop name
 shop_name = "elektromarket"
@@ -62,7 +62,7 @@ with open(csv_filename, mode="w", newline="", encoding="utf-8") as csvfile:
 
                     # Skip downloading prices for unavailable items
                     if product_info.find('span', class_='boxRed'):
-                        logger.info(f"  Product temporarily unavailable: {title}")
+                        logger.info(f"Product temporarily unavailable: {title}")
 
                     # Retrieve product price
                     else:
